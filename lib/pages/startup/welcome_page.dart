@@ -47,8 +47,8 @@ class _WelcomePageState extends State<WelcomePage> {
           children: [
             const SizedBox(height: 50),
             SizedBox(
-              width: mediaQuery.size.width / 2,
-              height: mediaQuery.size.width / 2,
+              width: mediaQuery.size.width / 3,
+              height: mediaQuery.size.width / 3,
               child: Image.asset('assets/images/sparkli.png'),
             ),
             const SizedBox(height: 25),
