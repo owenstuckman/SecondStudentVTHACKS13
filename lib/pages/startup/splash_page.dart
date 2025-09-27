@@ -44,7 +44,7 @@ class SplashPageState extends State<SplashPage> {
     if (!hasPath) {
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (context) => FileStorage()),
+        MaterialPageRoute(builder: (context) => HomePage()),
         (route) => false,
       );
       return;
