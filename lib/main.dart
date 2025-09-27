@@ -63,7 +63,7 @@ class MyApp extends StatelessWidget {
           theme: Themes.themeData[snapshot.data?.data['theme']] ??
               Themes.themeData['Scarlet'],
           //Loading screen; processes auth
-          home: const CardPage(),
+          home: const SplashPage(),
           debugShowCheckedModeBanner: false,
         );
       },

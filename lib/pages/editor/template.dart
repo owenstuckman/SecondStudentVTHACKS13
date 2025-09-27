@@ -1,5 +1,7 @@
-// A simple starter delta (JSON-compatible map)
-const List<Map<String, dynamic>> kStarterDelta = [
+class Template {
+
+/// Starter Quill Delta (JSON) for new docs
+static final List<Map<String, dynamic>> starterDelta = [
   {
     "insert": "SecondStudent\n",
     "attributes": {"header": 1},
@@ -10,8 +12,10 @@ const List<Map<String, dynamic>> kStarterDelta = [
   {"insert": "1. Or a numbered list\n"},
   {"insert": "\n"},
   {
-    "insert": "``` code block ```\n",
+    "insert": "``` Code block ```\n",
     "attributes": {"code-block": true},
   },
   {"insert": "\n"},
 ];
+
+}

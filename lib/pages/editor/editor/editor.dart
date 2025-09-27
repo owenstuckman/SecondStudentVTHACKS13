@@ -2,22 +2,27 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'package:flutter_quill_extensions/flutter_quill_extensions.dart';
-import 'package:secondstudent/pages/editor/customblocks.dart';
-import 'package:secondstudent/pages/editor/customBlocks/iframe_block.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'slash_menu/slash_menu.dart';
-import 'slash_menu/slash_menu_action.dart';
-import 'slash_menu/custom_slash_menu_items.dart';
-import 'slash_menu/default_slash_menu_items.dart';
+// Custom blocks: helpers (normalize/insert/addEditNote, Notes builder, etc.)
+import 'package:secondstudent/pages/editor/custom_blocks/customblocks.dart';
 
+// Iframe builder lives here (per your note)
+import 'package:secondstudent/pages/editor/custom_blocks/iframe_block.dart';
+
+import '../slash_menu/slash_menu.dart';
+import '../slash_menu/slash_menu_action.dart';
+import '../slash_menu/custom_slash_menu_items.dart';
+import '../slash_menu/default_slash_menu_items.dart';
+
+import '../template.dart';
 
 class EditorScreen extends StatefulWidget {
   const EditorScreen({super.key});
@@ -29,141 +34,19 @@ class EditorScreen extends StatefulWidget {
 class _EditorScreenState extends State<EditorScreen> {
   static const String _prefsKey = 'editor_doc_delta';
 
-  /// Starter Quill Delta (JSON) for new docs
-  static const List<Map<String, dynamic>> _starterDelta = [
-    {
-      "insert": "SecondStudent\n",
-      "attributes": {"header": 1},
-    },
-    {"insert": "Type / to open the command menu.\n"},
-    {"insert": "\n"},
-    {"insert": "• Try a bullet list\n"},
-    {"insert": "1. Or a numbered list\n"},
-    {"insert": "\n"},
-    {
-      "insert": "``` Code block ```\n",
-      "attributes": {"code-block": true},
-    },
-    {"insert": "\n"},
-  ];
-
-  /// Add note block helper
-  Future<void> _addEditNote(
-    BuildContext context, {
-    quill.Document? document,
-    int? existingOffset,
-  }) async {
-    final isEditing = document != null;
-    final dialogController = quill.QuillController(
-      document: document ?? quill.Document(),
-      selection: const TextSelection.collapsed(offset: 0),
-    );
-
-    await showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        titlePadding: const EdgeInsets.only(left: 16, top: 8),
-        title: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(isEditing ? 'Edit note' : 'Add note'),
-            IconButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              icon: const Icon(Icons.close),
-            ),
-          ],
-        ),
-        content: quill.QuillEditor.basic(
-          controller: dialogController,
-          config: const quill.QuillEditorConfig(),
-        ),
-      ),
-    );
-
-    if (dialogController.document.isEmpty()) return;
-
-    // Serialize inner doc and create the embed
-    final notesEmbed = NotesBlockEmbed.fromDocument(dialogController.document);
-
-    if (isEditing && existingOffset != null) {
-      // Replace the existing embed at its node offset
-      // In v10+ each embed occupies a single character length.
-      _controller.replaceText(
-        existingOffset,
-        1,
-        quill.BlockEmbed.custom(notesEmbed),
-        TextSelection.collapsed(offset: existingOffset + 1),
-      );
-      return;
-    }
-
-    // Insert a new embed at the current caret, plus a newline
-    final insertAt = _controller.selection.isValid
-        ? _controller.selection.start
-        : _controller.document.length;
-    _controller.replaceText(
-      insertAt,
-      0,
-      quill.BlockEmbed.custom(notesEmbed),
-      TextSelection.collapsed(offset: insertAt + 1),
-    );
-    // Add a newline after the block so the caret ends below it
-    _controller.replaceText(
-      insertAt + 1,
-      0,
-      '\n',
-      TextSelection.collapsed(offset: insertAt + 2),
-    );
-  }
-
-  //excalidraw and google doc helpers
-  String _normalizeExcalidraw(String url) {
-    // Accepts app.excalidraw.com links. If user pasted plain excalidraw.com, fix host.
-    final u = Uri.tryParse(url);
-    if (u == null) return url;
-    if (u.host == 'excalidraw.com') {
-      return u.replace(host: 'app.excalidraw.com').toString();
-    }
-    return url;
-  }
-
-  /// Returns a preview/published URL, or null if we can’t make it embeddable.
-  String? _normalizeGoogle(String url) {
-    final u = Uri.tryParse(url);
-    if (u == null) return null;
-
-    // Case 1: already a Drive file preview link → keep
-    if (u.host.endsWith('drive.google.com') && u.path.contains('/preview')) {
-      return url;
-    }
-
-    // Case 2: Drive file /view?usp=...  -> swap to /preview
-    if (u.host.endsWith('drive.google.com') && u.path.contains('/file/')) {
-      final newPath = u.path.replaceAll('/view', '/preview');
-      return u.replace(path: newPath, queryParameters: {}).toString();
-    }
-
-    // Case 3: Google Docs “publish to web” gives an embeddable /pub or /embed URL → keep
-    if (u.host.endsWith('docs.google.com') &&
-        (u.path.contains('/pub') || u.path.contains('/embed'))) {
-      return url;
-    }
-
-    // Regular Docs /document/d/<id>/edit is usually blocked by X-Frame-Options.
-    // Ask the user to use File → Share → Publish to web, then paste that link.
-    return null;
-  }
-
   late quill.QuillController _controller;
   StreamSubscription? _docSub;
 
   // Track the file currently open in the editor. If null, Save warns the user.
   String? _currentFilePath;
 
-  // Slash menu state (keep if you use it)
+  // Slash menu state
   bool _isSlashMenuOpen = false;
   String _slashQuery = '';
   final ValueNotifier<int> _slashSelectionIndex = ValueNotifier<int>(0);
+
+  // Custom blocks facade
+  final cb = CustomBlocks();
 
   @override
   void initState() {
@@ -171,6 +54,13 @@ class _EditorScreenState extends State<EditorScreen> {
     _controller = quill.QuillController.basic();
     _attachDocListener();
     _bootstrapDoc(); // load saved or start with template
+  }
+
+  @override
+  void dispose() {
+    _docSub?.cancel();
+    _controller.dispose();
+    super.dispose();
   }
 
   void _attachDocListener() {
@@ -205,7 +95,7 @@ class _EditorScreenState extends State<EditorScreen> {
 
   /// Replace the current document with the starter template.
   void _newFromStarter() {
-    final doc = quill.Document.fromJson(_starterDelta);
+    final doc = quill.Document.fromJson(Template.starterDelta);
     _controller = quill.QuillController(
       document: doc,
       selection: const TextSelection.collapsed(offset: 0),
@@ -299,42 +189,40 @@ class _EditorScreenState extends State<EditorScreen> {
     return parts.isEmpty ? path : parts.last;
   }
 
-  // --- Slash menu helpers ---
+  // ---------------- Slash menu helpers ----------------
+
   List<SlashMenuItemData> get _allSlashItemsMerged {
-  final defaults = DefaultSlashMeuItems().defaultSlashMenuItems;
-  final customs  = CustomSlashMenuItems().items;
-  return [...defaults, const SlashMenuItemData.separator(), ...customs];
-}
-
-List<SlashMenuItemData> get _filteredSlashItems {
-  final q = _slashQuery.trim().toLowerCase();
-  final defaults = DefaultSlashMeuItems().defaultSlashMenuItems;
-  final customs  = CustomSlashMenuItems().items;
-
-  bool match(SlashMenuItemData it) {
-    if (it.isLabel || it.isSeparator) return false;
-    if (q.isEmpty) return true;
-    return it.title.toLowerCase().contains(q) ||
-           it.subtitle.toLowerCase().contains(q);
+    final defaults = DefaultSlashMeuItems().defaultSlashMenuItems;
+    final customs = CustomSlashMenuItems().items;
+    return [...defaults, const SlashMenuItemData.separator(), ...customs];
   }
 
-  final d = defaults.where(match).toList();
-  final c = customs.where(match).toList();
+  List<SlashMenuItemData> get _filteredSlashItems {
+    final q = _slashQuery.trim().toLowerCase();
+    final defaults = DefaultSlashMeuItems().defaultSlashMenuItems;
+    final customs = CustomSlashMenuItems().items;
 
-  if (q.isEmpty) {
-    // Show both sections with a divider
-    if (d.isEmpty) return c;
-    if (c.isEmpty) return d;
-    return [...d, const SlashMenuItemData.separator(), ...c];
-  } else {
-    // Only show divider if both sections have matches
-    if (d.isEmpty && c.isEmpty) return [];
-    if (d.isEmpty) return c;
-    if (c.isEmpty) return d;
-    return [...d, const SlashMenuItemData.separator(), ...c];
+    bool match(SlashMenuItemData it) {
+      if (it.isLabel || it.isSeparator) return false;
+      if (q.isEmpty) return true;
+      return it.title.toLowerCase().contains(q) ||
+          it.subtitle.toLowerCase().contains(q);
+    }
+
+    final d = defaults.where(match).toList();
+    final c = customs.where(match).toList();
+
+    if (q.isEmpty) {
+      if (d.isEmpty) return c;
+      if (c.isEmpty) return d;
+      return [...d, const SlashMenuItemData.separator(), ...c];
+    } else {
+      if (d.isEmpty && c.isEmpty) return [];
+      if (d.isEmpty) return c;
+      if (c.isEmpty) return d;
+      return [...d, const SlashMenuItemData.separator(), ...c];
+    }
   }
-}
-
 
   void _openSlashMenu(String query) {
     if (!_isSlashMenuOpen) {
@@ -397,7 +285,7 @@ List<SlashMenuItemData> get _filteredSlashItems {
     }
   }
 
-  void _onSlashSelect(SlashMenuAction action) {
+  void _onSlashSelect(SlashMenuAction action) async {
     final selection = _controller.selection;
     if (!selection.isValid) {
       _closeSlashMenu();
@@ -455,9 +343,18 @@ List<SlashMenuItemData> get _filteredSlashItems {
       case SlashMenuAction.codeBlock:
         _controller.formatSelection(quill.Attribute.codeBlock);
         break;
+
       case SlashMenuAction.addEditNote:
-        _addEditNote(context);
+        await cb.addEditNote(
+          context,
+          controller: _controller,
+          document: _controller.document,
+          existingOffset: _controller.selection.isValid
+              ? _controller.selection.start
+              : null,
+        );
         break;
+
       case SlashMenuAction.image:
         _promptForUrl(context, label: 'Image URL').then((url) {
           if (url == null || url.isEmpty) return;
@@ -470,6 +367,7 @@ List<SlashMenuItemData> get _filteredSlashItems {
           );
         });
         break;
+
       case SlashMenuAction.video:
         _promptForUrl(context, label: 'Video URL').then((url) {
           if (url == null || url.isEmpty) return;
@@ -482,27 +380,15 @@ List<SlashMenuItemData> get _filteredSlashItems {
           );
         });
         break;
+
       case SlashMenuAction.iframeExcalidraw:
         _promptForUrl(context, label: 'Excalidraw room/share URL').then((url) {
           if (url == null || url.isEmpty) return;
-          final insertAt = _controller.selection.isValid
-              ? _controller.selection.start
-              : _controller.document.length;
-          final block = quill.BlockEmbed.custom(
-            IframeBlockEmbed(url: _normalizeExcalidraw(url)),
-          );
-          _controller.replaceText(
-            insertAt,
-            0,
-            block,
-            TextSelection.collapsed(offset: insertAt + 1),
-          );
-          _controller.replaceText(
-            insertAt + 1,
-            0,
-            '\n',
-            TextSelection.collapsed(offset: insertAt + 2),
-          );
+          cb.insertIframe(
+            _controller,
+            url,
+            height: 560,
+          ); // helper normalizes & inserts
         });
         break;
 
@@ -512,35 +398,18 @@ List<SlashMenuItemData> get _filteredSlashItems {
           label: 'Google Doc (published) or Drive preview URL',
         ).then((url) {
           if (url == null || url.isEmpty) return;
-          final normalized = _normalizeGoogle(url);
+          final normalized = cb.normalizeGoogle(url);
           if (normalized == null) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
                 content: Text(
-                  'Use a published link (File → Share → Publish to web) or Drive “/preview” link.',
+                  'Use a published-to-web or /preview Google link.',
                 ),
               ),
             );
             return;
           }
-          final insertAt = _controller.selection.isValid
-              ? _controller.selection.start
-              : _controller.document.length;
-          final block = quill.BlockEmbed.custom(
-            IframeBlockEmbed(url: normalized, height: 560),
-          );
-          _controller.replaceText(
-            insertAt,
-            0,
-            block,
-            TextSelection.collapsed(offset: insertAt + 1),
-          );
-          _controller.replaceText(
-            insertAt + 1,
-            0,
-            '\n',
-            TextSelection.collapsed(offset: insertAt + 2),
-          );
+          cb.insertIframe(_controller, normalized, height: 560);
         });
         break;
     }
@@ -660,11 +529,14 @@ List<SlashMenuItemData> get _filteredSlashItems {
                         autoFocus: true,
                         placeholder: 'Type / to open the command menu.',
                         embedBuilders: [
-                          IframeEmbedBuilder(),
+                          // From lib/pages/editor/custom_blocks/iframe_block.dart
+                          const IframeEmbedBuilder(),
+                          // From customblocks.dart barrel
                           NotesEmbedBuilder(
                             onTapEdit: (ctx, {document, existingOffset}) =>
-                                _addEditNote(
+                                cb.addEditNote(
                                   ctx,
+                                  controller: _controller,
                                   document: document,
                                   existingOffset: existingOffset,
                                 ),

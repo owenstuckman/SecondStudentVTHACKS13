@@ -3,8 +3,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'editor.dart';
-import 'file_system_viewer.dart';
+import 'editor/editor.dart';
+import 'file_system/file_system_viewer.dart';
 
 class EditorWorkspace extends StatefulWidget {
   const EditorWorkspace({super.key});
