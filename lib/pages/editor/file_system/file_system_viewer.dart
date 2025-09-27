@@ -36,13 +36,17 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
     _loadRoot();
   }
 
+  // lib/pages/editor/file_system_viewer.dart
+  // (keep your imports)
+
   Future<void> _loadRoot() async {
     setState(() => _loadingRoot = true);
     try {
       final prefs = await SharedPreferences.getInstance();
       final p = prefs.getString('path_to_files')?.trim();
+
       if (p == null || p.isEmpty) {
-        _rootPath = null;
+        _rootPath = null; // Shows your "Set a valid root" UI
       } else {
         final dir = Directory(p);
         if (await dir.exists()) {

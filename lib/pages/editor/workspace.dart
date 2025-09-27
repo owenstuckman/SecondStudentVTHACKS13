@@ -1,7 +1,10 @@
-// lib/workspace.dart
+// lib/pages/editor/workspace.dart
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 
 import 'editor/editor.dart';
 import 'file_system/file_system_viewer.dart';
@@ -14,26 +17,59 @@ class EditorWorkspace extends StatefulWidget {
 }
 
 class _EditorWorkspaceState extends State<EditorWorkspace> {
-  // We’ll use a GlobalKey so we can call loadFromJsonString(...) on the editor state.
   final GlobalKey _editorKey = GlobalKey();
 
-  // Sidebar (file list) width and visibility
   double _leftWidth = 300;
   bool _showSidebar = true;
 
   @override
   void initState() {
     super.initState();
+    _ensureWorkspacePath();          // <- NEW: make sure a sane default exists
     _restoreLayoutPrefs();
+  }
+
+  /// Choose a default, writable workspace per platform and persist it if missing.
+  Future<void> _ensureWorkspacePath() async {
+    final prefs = await SharedPreferences.getInstance();
+    final existing = prefs.getString('path_to_files');
+    if (existing != null && existing.trim().isNotEmpty) return;
+
+    String path;
+    if (kIsWeb) {
+      // No native FS. Your FileStorage page can swap to IndexedDB later.
+      path = 'web://workspace';
+    } else if (Platform.isMacOS) {
+      // ~/Library/Application Support/<bundle-id>/SecondStudent/workspace
+      final support = await getApplicationSupportDirectory();
+      final ws = Directory(p.join(support.path, 'SecondStudent', 'workspace'));
+      if (!await ws.exists()) await ws.create(recursive: true);
+      path = ws.path;
+    } else if (Platform.isWindows || Platform.isLinux) {
+      // App documents dir (writable). If you prefer real "Documents", add a helper or another plugin.
+      final docs = await getApplicationDocumentsDirectory();
+      final ws = Directory(p.join(docs.path, 'SecondStudent', 'workspace'));
+      if (!await ws.exists()) await ws.create(recursive: true);
+      path = ws.path;
+    } else if (Platform.isIOS || Platform.isAndroid) {
+      final docs = await getApplicationDocumentsDirectory();
+      final ws = Directory(p.join(docs.path, 'workspace'));
+      if (!await ws.exists()) await ws.create(recursive: true);
+      path = ws.path;
+    } else {
+      final tmp = await getTemporaryDirectory();
+      final ws = Directory(p.join(tmp.path, 'workspace'));
+      if (!await ws.exists()) await ws.create(recursive: true);
+      path = ws.path;
+    }
+
+    await prefs.setString('path_to_files', path);
   }
 
   Future<void> _restoreLayoutPrefs() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _leftWidth = (prefs.getDouble('workspace_left_width') ?? 300).clamp(
-        220,
-        600,
-      );
+      _leftWidth = (prefs.getDouble('workspace_left_width') ?? 300).clamp(220, 600);
       _showSidebar = prefs.getBool('workspace_show_sidebar') ?? true;
     });
   }
@@ -44,86 +80,21 @@ class _EditorWorkspaceState extends State<EditorWorkspace> {
     await prefs.setBool('workspace_show_sidebar', _showSidebar);
   }
 
-  // Optional: quick way to set/change the workspace folder path in SharedPreferences.
-  Future<void> _promptSetFolderPath() async {
-    final prefs = await SharedPreferences.getInstance();
-    final current = prefs.getString('path_to_files') ?? '';
-    final controller = TextEditingController(text: current);
-
-    final newPath = await showDialog<String>(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          title: const Text('Set Workspace Folder Path'),
-          content: TextField(
-            controller: controller,
-            decoration: const InputDecoration(
-              hintText: r'/Users/you/Documents/secondstudent',
-            ),
-            autofocus: true,
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(null),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
-              child: const Text('Save'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (newPath == null) return;
-
-    try {
-      // Basic existence check (desktop/mobile). On mobile you typically point to app docs dir.
-      final dir = Directory(newPath);
-      if (!await dir.exists()) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Folder does not exist. Please create it first.'),
-          ),
-        );
-        return;
-      }
-      await prefs.setString('path_to_files', newPath);
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Workspace set to $newPath')));
-      // Rebuild will cause FileSystemViewer to re-read prefs on init; use its Refresh button otherwise.
-      setState(() {});
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error setting folder: $e')));
-    }
-  }
-
   Future<void> _onFileSelected(File file) async {
     try {
       final json = await file.readAsString();
       final state = _editorKey.currentState;
       if (state == null) {
         if (!mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Editor not ready yet.')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Editor not ready yet.')));
         return;
       }
-      // Call the editor’s public method via dynamic (state class is private).
-      // ignore: avoid_dynamic_calls
       (state as dynamic).loadFromJsonString(json, sourcePath: file.path);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to open file: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Failed to open file: $e')));
     }
   }
 
@@ -158,18 +129,11 @@ class _EditorWorkspaceState extends State<EditorWorkspace> {
         actions: [
           IconButton(
             tooltip: _showSidebar ? 'Hide sidebar' : 'Show sidebar',
-            icon: Icon(
-              _showSidebar ? Icons.view_sidebar : Icons.view_sidebar_outlined,
-            ),
+            icon: Icon(_showSidebar ? Icons.view_sidebar : Icons.view_sidebar_outlined),
             onPressed: () {
               setState(() => _showSidebar = !_showSidebar);
               _persistLayoutPrefs();
             },
-          ),
-          IconButton(
-            tooltip: 'Set folder path',
-            icon: const Icon(Icons.folder_open),
-            onPressed: _promptSetFolderPath,
           ),
           const SizedBox(width: 8),
         ],
@@ -189,28 +153,19 @@ class _EditorWorkspaceState extends State<EditorWorkspace> {
                     ),
                   ),
                 ),
-                // inside build(...) where FileSystemViewer is created
                 child: FileSystemViewer(
                   onFileSelected: _onFileSelected,
                   onFileRenamed: (oldFile, newFile) {
                     final state = _editorKey.currentState;
                     if (state == null) return;
-                    // ignore: avoid_dynamic_calls
-                    final dynamic s = state;
-                    // If the editor has a public method to update its bound path, call it:
                     try {
-                      s.updateCurrentFilePath(newFile.path);
-                    } catch (_) {
-                      // Fallback: if no method exists, you could reload the doc instead:
-                      // final json = await newFile.readAsString();
-                      // s.loadFromJsonString(json, sourcePath: newFile.path);
-                    }
+                      (state as dynamic).updateCurrentFilePath(newFile.path);
+                    } catch (_) {}
                   },
                 ),
               ),
             ),
           if (_showSidebar) divider,
-          // Right pane: Editor fills remaining space
           Expanded(child: EditorScreen(key: _editorKey)),
         ],
       ),
