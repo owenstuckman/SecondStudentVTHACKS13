@@ -15,6 +15,7 @@ import 'package:secondstudent/globals/static/custom_widgets/logo.dart';
 import 'package:secondstudent/globals/stream_signal.dart';
 import 'package:secondstudent/pages/calendar/calendar.dart';
 import 'package:secondstudent/pages/todo/todo.dart';
+import 'file_storage.dart';
 
 /*
 Home Page Class
@@ -72,13 +73,13 @@ class HomePageState extends State<HomePage> {
       filled: Icons.calendar_month,
       outlined: Icons.calendar_month_outlined,
       label: 'Calendar',
-      lock: false, 
+      lock: false,
     ),
     _NavItem(
       filled: Icons.check_box,
       outlined: Icons.check_box_outlined,
       label: 'To-Do',
-      lock: false, 
+      lock: false,
     ),
   ];
 
@@ -254,6 +255,16 @@ class HomePageState extends State<HomePage> {
                     title: const Text('Settings'),
                     onTap: () =>
                         context.pushSwipePage(Settings(), title: "Settings"),
+                  ),
+                  // FILE STORAGE LOCATION
+
+                  ListTile(
+                    leading: const Icon(Icons.file_copy_outlined),
+                    title: const Text('File Location'),
+                    onTap: () => context.pushSwipePage(
+                      FileStorage(),
+                      title: "File Selection",
+                    ),
                   ),
 
                   // OPTIONAL FIXED WIDTH ADJUST (keep if you still want a slider UI)

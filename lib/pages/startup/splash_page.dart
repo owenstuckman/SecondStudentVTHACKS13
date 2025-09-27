@@ -38,13 +38,13 @@ class SplashPageState extends State<SplashPage> {
   //Redirects based on auth state
   Future<void> _redirect() async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
-    final String pathValue = prefs.getString('path') ?? '';
+    final String pathValue = prefs.getString('path_to_files') ?? '';
     final bool hasPath = pathValue.isNotEmpty;
 
     if (!hasPath) {
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (context) => HomePage()),
+        MaterialPageRoute(builder: (context) => FileStorage()),
         (route) => false,
       );
       return;

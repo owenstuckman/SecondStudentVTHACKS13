@@ -15,11 +15,20 @@ class NotificationService {
       requestSoundPermission: true,
     );
 
+    const windowsInit =
+        WindowsInitializationSettings(
+          appName: 'SecondStudent',
+          appUserModelId: 'Com.Dexterous.FlutterLocalNotificationsExample',
+          // Search online for GUID generators to make your own
+          guid: 'd49b0314-ee7a-4626-bf79-97cdb8a991bb',
+        );
+
     // IMPORTANT: include macOS here, not just iOS
     const initSettings = InitializationSettings(
       android: androidInit,
       iOS: darwinInit,
       macOS: darwinInit,
+      windows: windowsInit
     );
 
     await _plugin.initialize(initSettings);

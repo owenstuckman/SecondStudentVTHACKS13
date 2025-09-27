@@ -59,8 +59,7 @@ class MyApp extends StatelessWidget {
         //Primary application
         return MaterialApp(
           title: 'SecondStudent',
-          theme:
-              Themes.themeData[snapshot.data?.data['theme']] ??
+          theme: Themes.themeData[snapshot.data?.data['theme']] ??
               Themes.themeData['Scarlet'],
           //Loading screen; processes auth
           home: const SplashPage(),

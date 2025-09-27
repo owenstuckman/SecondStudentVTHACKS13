@@ -2,7 +2,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
-
+import 'dart:io';
+import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -226,16 +228,41 @@ class _EditorScreenState extends State<EditorScreen> {
   /// Download/save the current Delta JSON using file_saver (works on web/desktop/mobile).
   Future<void> _downloadDeltaJson() async {
     final bytes = _exportDeltaBytes();
-    await FileSaver.instance.saveFile(
-      name: 'secondstudent',
-      bytes: bytes,
-      ext: 'quill.json',
-      mimeType: MimeType.json,
-    );
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Exported editor Delta as JSON')),
-      );
+
+    final prefs = await SharedPreferences.getInstance();
+    final dir = prefs.getString('path_to_files') ?? "";
+    
+    // Check if the directory is valid
+    if (dir.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Invalid file path. Please set a valid path in settings.')),
+        );
+      }
+      return;
+    }
+
+    final jsonString = utf8.decode(bytes);
+    // need to correct how its named
+    final file = File('$dir/File.json');
+
+    try {
+      // Create a blank file before writing
+      await file.create(recursive: true);
+      
+      // Write to file
+      await file.writeAsString(jsonString);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Saved file to ${file.path}')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error saving file: $e')),
+        );
+      }
     }
   }
 
