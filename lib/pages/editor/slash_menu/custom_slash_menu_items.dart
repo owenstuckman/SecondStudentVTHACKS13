@@ -5,12 +5,18 @@ import 'slash_menu_action.dart';
 import 'package:secondstudent/globals/database.dart';
 
 class CustomSlashMenuItems {
-  List<SlashMenuItemData> _items = [
+  List<SlashMenuItemData> get items => const [
+    // SlashMenuItemData(
+    //   action: SlashMenuAction.addEditNote,
+    //   icon: Icons.sticky_note_2_outlined,
+    //   title: 'Note',
+    //   subtitle: 'Inline note block',
+    // ),
     SlashMenuItemData(
-      action: SlashMenuAction.addEditNote,
-      icon: Icons.sticky_note_2_outlined,
-      title: 'Note',
-      subtitle: 'Inline note block',
+      action: SlashMenuAction.pageLink,
+      icon: Icons.link_outlined,
+      title: 'Page link',
+      subtitle: 'Link to another JSON page',
     ),
     SlashMenuItemData(
       action: SlashMenuAction.iframeExcalidraw,
@@ -24,6 +30,12 @@ class CustomSlashMenuItems {
       title: 'Google Doc',
       subtitle: 'Published or /preview link',
     ),
+    SlashMenuItemData(
+      action: SlashMenuAction.embedPdf,
+      icon: Icons.picture_as_pdf_outlined,
+      title: 'PDF',
+      subtitle: 'PDF URL, data: URI, or assets/path.pdf',
+    )
   ];
 
   // Getter for items

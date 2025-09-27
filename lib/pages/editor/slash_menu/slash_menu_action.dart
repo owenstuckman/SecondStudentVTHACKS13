@@ -15,6 +15,8 @@ enum SlashMenuAction {
   addEditNote,
   iframeExcalidraw,
   iframeGoogleDoc,
+  pageLink,
+  embedPdf,
 }
 
 // Combine default actions with fetched extras

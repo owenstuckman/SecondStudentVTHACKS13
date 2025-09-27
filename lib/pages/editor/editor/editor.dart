@@ -9,9 +9,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'package:flutter_quill_extensions/flutter_quill_extensions.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 // Custom blocks: helpers (normalize/insert/addEditNote, Notes builder, etc.)
 import 'package:secondstudent/pages/editor/custom_blocks/customblocks.dart';
+import 'package:secondstudent/pages/editor/custom_blocks/page_link_service.dart';
+import 'package:secondstudent/pages/editor/custom_blocks/pdf_block.dart';
 
 // Iframe builder lives here (per your note)
 import 'package:secondstudent/pages/editor/custom_blocks/iframe_block.dart';
@@ -308,6 +311,144 @@ class _EditorScreenState extends State<EditorScreen> {
       );
     }
 
+    switch (action) {
+      case SlashMenuAction.paragraph:
+        _controller.formatSelection(quill.Attribute.header);
+        _controller.formatSelection(quill.Attribute.list);
+        break;
+      case SlashMenuAction.heading1:
+        _controller.formatSelection(quill.Attribute.h1);
+        break;
+      case SlashMenuAction.heading2:
+        _controller.formatSelection(quill.Attribute.h2);
+        break;
+      case SlashMenuAction.heading3:
+        _controller.formatSelection(quill.Attribute.h3);
+        break;
+      case SlashMenuAction.bulletList:
+        _controller.formatSelection(quill.Attribute.ul);
+        break;
+      case SlashMenuAction.numberedList:
+        _controller.formatSelection(quill.Attribute.ol);
+        break;
+      case SlashMenuAction.toDoList:
+        _controller.formatSelection(quill.Attribute.unchecked);
+        break;
+      case SlashMenuAction.divider:
+        final int index = _controller.selection.baseOffset;
+        _controller.replaceText(
+          index,
+          0,
+          '\n---\n',
+          const TextSelection.collapsed(offset: 0),
+        );
+        break;
+      case SlashMenuAction.codeBlock:
+        _controller.formatSelection(quill.Attribute.codeBlock);
+        break;
+
+      case SlashMenuAction.addEditNote:
+        await cb.addEditNote(
+          context,
+          controller: _controller,
+          document: _controller.document,
+          existingOffset: _controller.selection.isValid
+              ? _controller.selection.start
+              : null,
+        );
+        break;
+
+      case SlashMenuAction.pageLink:
+        await PageLinkService.insertPageLink(
+          context: context,
+          controller: _controller,
+        );
+        break;
+
+      case SlashMenuAction.image:
+        _promptForUrl(context, label: 'Image URL').then((url) {
+          if (url == null || url.isEmpty) return;
+          final idx = _controller.selection.baseOffset;
+          _controller.replaceText(
+            idx,
+            0,
+            quill.BlockEmbed.image(url),
+            const TextSelection.collapsed(offset: 0),
+          );
+        });
+        break;
+
+      case SlashMenuAction.video:
+        _promptForUrl(context, label: 'Video URL').then((url) {
+          if (url == null || url.isEmpty) return;
+          final idx = _controller.selection.baseOffset;
+          _controller.replaceText(
+            idx,
+            0,
+            quill.BlockEmbed.video(url),
+            const TextSelection.collapsed(offset: 0),
+          );
+        });
+        break;
+
+      case SlashMenuAction.iframeExcalidraw:
+        _promptForUrl(context, label: 'Excalidraw room/share URL').then((url) {
+          if (url == null || url.isEmpty) return;
+          cb.insertIframe(
+            _controller,
+            url,
+            height: 560,
+          ); // helper normalizes & inserts
+        });
+        break;
+
+      case SlashMenuAction.iframeGoogleDoc:
+        _promptForUrl(
+          context,
+          label: 'Google Doc (published) or Drive preview URL',
+        ).then((url) {
+          if (url == null || url.isEmpty) return;
+          final normalized = cb.normalizeGoogle(url);
+          if (normalized == null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Use a published-to-web or /preview Google link.',
+                ),
+              ),
+            );
+            return;
+          }
+          cb.insertIframe(_controller, normalized, height: 560);
+        });
+        break;
+
+      case SlashMenuAction.embedPdf:
+        _promptForUrl(
+          context,
+          label: 'PDF URL (https://), data: URI, or assets/path.pdf',
+        ).then((url) {
+          if (url == null || url.isEmpty) return;
+          final insertAt = _controller.selection.isValid
+              ? _controller.selection.start
+              : _controller.document.length;
+          final block = quill.BlockEmbed.custom(
+            PdfBlockEmbed(url: url, height: 560),
+          );
+          _controller.replaceText(
+            insertAt,
+            0,
+            block,
+            TextSelection.collapsed(offset: insertAt + 1),
+          );
+          _controller.replaceText(
+            insertAt + 1,
+            0,
+            '\n',
+            TextSelection.collapsed(offset: insertAt + 2),
+          );
+        });
+        break;
     if (!selection.isValid) {
       _closeSlashMenu();
       return;
@@ -406,10 +547,33 @@ class _EditorScreenState extends State<EditorScreen> {
                         scrollable: true,
                         autoFocus: true,
                         placeholder: 'Type / to open the command menu.',
+                        linkActionPickerDelegate:
+                            (ctx, link, isReadOnly) async =>
+                                quill.LinkMenuAction.launch,
+                        onLaunchUrl: (url) async {
+                          final handled = await PageLinkService.handleLaunchUrl(
+                            url,
+                            context: context,
+                            onOpenJson: (absPath) async {
+                              final json = await File(absPath).readAsString();
+                              loadFromJsonString(json, sourcePath: absPath);
+                            },
+                          );
+                          if (!handled) {
+                            final uri = Uri.tryParse(url);
+                            if (uri != null) {
+                              try {
+                                await launchUrl(
+                                  uri,
+                                  mode: LaunchMode.externalApplication,
+                                );
+                              } catch (_) {}
+                            }
+                          }
+                        },
                         embedBuilders: [
-                          // From lib/pages/editor/custom_blocks/iframe_block.dart
+                          const PdfEmbedBuilder(), 
                           const IframeEmbedBuilder(),
-                          // From customblocks.dart barrel
                           NotesEmbedBuilder(
                             onTapEdit: (ctx, {document, existingOffset}) =>
                                 cb.addEditNote(
@@ -422,9 +586,8 @@ class _EditorScreenState extends State<EditorScreen> {
                           ...FlutterQuillEmbeds.editorBuilders(
                             imageEmbedConfig: QuillEditorImageEmbedConfig(
                               imageProviderBuilder: (context, imageUrl) {
-                                if (imageUrl.startsWith('assets/')) {
+                                if (imageUrl.startsWith('assets/'))
                                   return AssetImage(imageUrl);
-                                }
                                 return null;
                               },
                             ),
@@ -436,6 +599,7 @@ class _EditorScreenState extends State<EditorScreen> {
                       ),
                     ),
                   ),
+
                   if (_isSlashMenuOpen)
                     Align(
                       alignment: Alignment.bottomLeft,
