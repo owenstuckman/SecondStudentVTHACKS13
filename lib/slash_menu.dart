@@ -221,10 +221,10 @@ const List<SlashMenuItemData> defaultSlashMenuItems = [
     subtitle: 'Steps and ordered lists',
   ),
   SlashMenuItemData(
-    action: SlashMenuAction.quote,
-    icon: Icons.format_quote,
-    title: 'Quote',
-    subtitle: 'Highlight key ideas',
+    action: SlashMenuAction.toDoList,
+    icon: Icons.checklist_rtl,
+    title: 'To-do list',
+    subtitle: 'Track tasks with checkboxes',
   ),
   SlashMenuItemData(
     action: SlashMenuAction.divider,
