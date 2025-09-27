@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 // packages
 import 'package:flutter/material.dart';
 import 'package:secondstudent/globals/static/static_pages/static_load.dart';
@@ -5,6 +8,7 @@ import 'package:secondstudent/pages/startup/welcome_page.dart';
 import '../../globals/auth_service.dart';
 import '../../globals/database.dart';
 import 'home_page.dart';
+import 'file_storage.dart';
 
 /*
 Splash Page Class
@@ -27,37 +31,47 @@ class SplashPageState extends State<SplashPage> {
   @override
   void initState() {
     super.initState();
-    //Checks auth asynchronously to build
+    //Checks file existance
     _redirect();
   }
-  
+
   //Redirects based on auth state
   Future<void> _redirect() async {
-    
-    // await for for the widget to mount; Duration.zero necessary fsr
-    await Future.delayed(Duration.zero);
+    bool folderExists = false;
 
-    if(!await AuthService.verifyAuth()){
-      AuthService.logOutAccount();
-    }
+    final filePath = '../../../devFolder/storage.json';
 
-    if (!AuthService.authorized()) {
-      //Removes all widgets from navigation and pushes signup page
-      if(mounted){
-        Navigator.of(context)
-            .pushAndRemoveUntil(
-            MaterialPageRoute(builder: (context) => const WelcomePage()),
-                (route) => false);
+    // Read the file
+    final file = File(filePath);
+    if (await file.exists()) {
+      final contents = await file.readAsString();
+
+      // Decode the JSON
+      final data = jsonDecode(contents);
+      String pathValue = data['path'];
+
+      if (pathValue.isNotEmpty) {
+        folderExists = true;
       }
-    } else {
-      //Fetches db
-      await DataBase.init();
-      if(mounted){
-        //Removes all widgets from navigation and pushes home page
-        Navigator.of(context)
-            .pushAndRemoveUntil(
+
+      if (!folderExists) {
+        //Removes all widgets from navigation and pushes signup page
+        if (mounted) {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => FileStorage()),
+            (route) => false,
+          );
+        }
+      } else {
+        //Fetches db
+        await DataBase.init();
+        if (mounted) {
+          //Removes all widgets from navigation and pushes home page
+          Navigator.of(context).pushAndRemoveUntil(
             MaterialPageRoute(builder: (context) => HomePage()),
-                (route) => false);
+            (route) => false,
+          );
+        }
       }
     }
   }
