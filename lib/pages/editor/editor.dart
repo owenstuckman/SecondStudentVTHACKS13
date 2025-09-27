@@ -154,7 +154,7 @@ class _EditorScreenState extends State<EditorScreen> {
         );
       }
     }
-  } 
+  }
 
   @override
   void dispose() {
@@ -446,7 +446,6 @@ class _EditorScreenState extends State<EditorScreen> {
                                 return null;
                               },
                             ),
-
                           ),
                         ],
                         textInputAction: TextInputAction.newline,
