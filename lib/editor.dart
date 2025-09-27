@@ -31,6 +31,8 @@ class _EditorScreenState extends State<EditorScreen> {
   // Floating reorder bubble (arrows) — anchored to caret line
   Offset? _reorderBubbleAnchor; // in our Stack's local coords
   bool _reorderBubbleVisible = false;
+  bool _reorderBubbleExpanded = false;
+  final GlobalKey _reorderBubbleKey = GlobalKey();
 
   // ---------- Keyboard: bubble-sort style moves ----------
   se.DocumentKeyboardAction get _reorderKeyboardAction => ({
@@ -187,6 +189,60 @@ class _EditorScreenState extends State<EditorScreen> {
 
         if (_slashMenuState.value is _SlashMenuVisible) {
           _hideSlashMenu();
+        }
+
+        return se.ExecutionInstruction.continueExecution;
+      };
+
+  // Hide the reorder bubble on general typing or navigation (except our Alt+J/K moves).
+  se.DocumentKeyboardAction get _dismissBubbleOnInputAction => ({
+        required se.SuperEditorContext editContext,
+        required KeyEvent keyEvent,
+      }) {
+        if (!_reorderBubbleVisible) {
+          return se.ExecutionInstruction.continueExecution;
+        }
+
+        if (keyEvent is! KeyDownEvent) {
+          return se.ExecutionInstruction.continueExecution;
+        }
+
+        final pressed = HardwareKeyboard.instance.logicalKeysPressed;
+        final altLike = pressed.contains(LogicalKeyboardKey.altLeft) ||
+            pressed.contains(LogicalKeyboardKey.altRight);
+
+        // Don't dismiss when using our Alt+J/K shortcuts.
+        if (altLike && (keyEvent.logicalKey == LogicalKeyboardKey.keyJ || keyEvent.logicalKey == LogicalKeyboardKey.keyK)) {
+          return se.ExecutionInstruction.continueExecution;
+        }
+
+        // Dismiss for most other inputs: character keys, enter, backspace, delete, arrows, space, tab.
+        final isCharacter = keyEvent.character != null && keyEvent.character!.isNotEmpty;
+        final lk = keyEvent.logicalKey;
+        final isEditingOrNav = isCharacter ||
+            lk == LogicalKeyboardKey.enter ||
+            lk == LogicalKeyboardKey.backspace ||
+            lk == LogicalKeyboardKey.delete ||
+            lk == LogicalKeyboardKey.space ||
+            lk == LogicalKeyboardKey.tab ||
+            lk == LogicalKeyboardKey.arrowUp ||
+            lk == LogicalKeyboardKey.arrowDown ||
+            lk == LogicalKeyboardKey.arrowLeft ||
+            lk == LogicalKeyboardKey.arrowRight ||
+            lk == LogicalKeyboardKey.pageUp ||
+            lk == LogicalKeyboardKey.pageDown ||
+            lk == LogicalKeyboardKey.home ||
+            lk == LogicalKeyboardKey.end;
+
+        if (isEditingOrNav) {
+          // Hide bubble but allow the keystroke to continue.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            setState(() {
+              _reorderBubbleVisible = false;
+              _reorderBubbleExpanded = false;
+            });
+          });
         }
 
         return se.ExecutionInstruction.continueExecution;
@@ -404,7 +460,28 @@ class _EditorScreenState extends State<EditorScreen> {
   @override
   Widget build(BuildContext context) {
     // Order: SuperEditor (with scroll listener), floating reorder bubble, slash menu.
-    return Stack(
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (event) {
+        if (!_reorderBubbleVisible) return;
+
+        final ctx = _reorderBubbleKey.currentContext;
+        final box = ctx?.findRenderObject() as RenderBox?;
+        if (box != null) {
+          final topLeft = box.localToGlobal(Offset.zero);
+          final rect = topLeft & box.size;
+          // If tap is within bubble, don't dismiss; let the bubble handle it.
+          if (rect.contains(event.position)) {
+            return;
+          }
+        }
+
+        setState(() {
+          _reorderBubbleVisible = false;
+          _reorderBubbleExpanded = false;
+        });
+      },
+      child: Stack(
       children: [
         NotificationListener<ScrollNotification>(
           onNotification: (n) {
@@ -413,13 +490,15 @@ class _EditorScreenState extends State<EditorScreen> {
             return false;
           },
           child: Padding(
-            padding: const EdgeInsets.only(left: 56, right: 24),
+            padding: const EdgeInsets.only(left: 16, right: 24),
             child: se.SuperEditor(
               editor: _editor,
               documentLayoutKey: _documentLayoutKey,
               inputSource: se.TextInputSource.keyboard,
               focusNode: _editorFocusNode,
               keyboardActions: [
+                // Dismiss first so it runs before other actions.
+                _dismissBubbleOnInputAction,
                 _reorderKeyboardAction,
                 _slashCommandKeyboardAction,
                 ...se.defaultKeyboardActions,
@@ -428,18 +507,24 @@ class _EditorScreenState extends State<EditorScreen> {
           ),
         ),
 
-        // Floating reorder bubble (Up2 / Up1 / Down1 / Down2 / Close)
+        // Floating reorder bubble (Up2 / Up1 / Down1 / Down2)
         if (_reorderBubbleVisible && _reorderBubbleAnchor != null)
           Positioned(
-            // Stick in the left gutter regardless of caret X.
-            left: 12,
+            // Pin to a fixed gutter near the start of the line (not the caret).
+            left: 4,
             top: _reorderBubbleAnchor!.dy - 6,
             child: _ReorderBubble(
+              key: _reorderBubbleKey,
+              expanded: _reorderBubbleExpanded,
+              onToggleExpanded: () => setState(() => _reorderBubbleExpanded = !_reorderBubbleExpanded),
               onUp1: () => _moveCurrentNodeBy(-1),
               onUp2: () => _moveCurrentNodeBy(-2),
               onDown1: () => _moveCurrentNodeBy(1),
               onDown2: () => _moveCurrentNodeBy(2),
-              onClose: () => setState(() => _reorderBubbleVisible = false),
+              onClose: () => setState(() {
+                _reorderBubbleVisible = false;
+                _reorderBubbleExpanded = false;
+              }),
             ),
           ),
 
@@ -479,6 +564,7 @@ class _EditorScreenState extends State<EditorScreen> {
           },
         ),
       ],
+    ),
     );
   }
 }
@@ -500,6 +586,9 @@ class _SlashMenuVisible extends _SlashMenuState {
 // ---------- Floating reorder bubble UI ----------
 class _ReorderBubble extends StatelessWidget {
   const _ReorderBubble({
+    super.key,
+    required this.expanded,
+    required this.onToggleExpanded,
     required this.onUp1,
     required this.onUp2,
     required this.onDown1,
@@ -507,20 +596,50 @@ class _ReorderBubble extends StatelessWidget {
     required this.onClose,
   });
 
+  final bool expanded;
+  final VoidCallback onToggleExpanded;
   final VoidCallback onUp1, onUp2, onDown1, onDown2, onClose;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    if (!expanded) {
+      // Collapsed: compact handle button
+      return Material(
+        elevation: 4,
+        color: theme.colorScheme.surface,
+        shape: const StadiumBorder(),
+        child: InkWell(
+          customBorder: const StadiumBorder(),
+          onTap: onToggleExpanded,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            child: Icon(
+              Icons.unfold_more,
+              size: 16,
+              color: theme.colorScheme.onSurface,
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Expanded: full set of controls
     return Material(
       elevation: 6,
       color: theme.colorScheme.surface,
       borderRadius: BorderRadius.circular(10),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            IconButton(
+              tooltip: 'Collapse',
+              icon: const Icon(Icons.chevron_left, size: 16),
+              onPressed: onToggleExpanded,
+              splashRadius: 14,
+            ),
             IconButton(
               tooltip: 'Up 2',
               icon: const Icon(Icons.keyboard_double_arrow_up, size: 18),
@@ -533,7 +652,7 @@ class _ReorderBubble extends StatelessWidget {
               onPressed: onUp1,
               splashRadius: 16,
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: 2),
             IconButton(
               tooltip: 'Down 1',
               icon: const Icon(Icons.keyboard_arrow_down, size: 18),
@@ -546,13 +665,8 @@ class _ReorderBubble extends StatelessWidget {
               onPressed: onDown2,
               splashRadius: 16,
             ),
-            const SizedBox(width: 4),
-            IconButton(
-              tooltip: 'Hide',
-              icon: const Icon(Icons.close, size: 16),
-              onPressed: onClose,
-              splashRadius: 14,
-            ),
+            const SizedBox(width: 2),
+            // Close button removed; bubble hides on general click/typing.
           ],
         ),
       ),
