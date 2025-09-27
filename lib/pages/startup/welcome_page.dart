@@ -48,7 +48,7 @@ class _WelcomePageState extends State<WelcomePage> {
             const SizedBox(height: 50),
             SizedBox(
               width: mediaQuery.size.width / 3,
-              height: mediaQuery.size.width / 3,
+              height: mediaQuery.size.height / 3,
               child: Image.asset('assets/images/sparkli.png'),
             ),
             const SizedBox(height: 25),
@@ -59,7 +59,7 @@ class _WelcomePageState extends State<WelcomePage> {
               },
               style: ElevatedButton.styleFrom(
                   side: BorderSide(color: colorScheme.onSurface, width: 1),
-                  fixedSize: Size(mediaQuery.size.width * 2 / 3, 50),
+                  fixedSize: Size(mediaQuery.size.width * 2 / 3, 30),
                   backgroundColor: colorScheme.secondary),
               child: Text('Sign In',
                   style: TextStyle(
