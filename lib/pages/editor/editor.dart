@@ -402,8 +402,26 @@ class _EditorScreenState extends State<EditorScreen> {
                         scrollable: true,
                         autoFocus: true,
                         placeholder: 'Type / to open the command menu.',
-                        embedBuilders:
-                            FlutterQuillEmbeds.defaultEditorBuilders(),
+                        embedBuilders: [
+                          ...FlutterQuillEmbeds.editorBuilders(
+                            imageEmbedConfig: QuillEditorImageEmbedConfig(
+                              imageProviderBuilder: (context, imageUrl) {
+                                // https://pub.dev/packages/flutter_quill_extensions#-image-assets
+                                if (imageUrl.startsWith('assets/')) {
+                                  return AssetImage(imageUrl);
+                                }
+                                return null;
+                              },
+                            ),
+                            videoEmbedConfig: QuillEditorVideoEmbedConfig(
+                              customVideoBuilder: (videoUrl, readOnly) {
+                                // To load YouTube videos https://github.com/singerdmx/flutter-quill/releases/tag/v10.8.0
+                                return null;
+                              },
+                            ),
+
+                          ),
+                        ],
                         textInputAction: TextInputAction.newline,
                       ),
                     ),

@@ -8,10 +8,26 @@ class NotesBlockEmbed extends CustomBlockEmbed {
 
   static const String noteType = 'notes';
 
-  static NotesBlockEmbed fromDocument(Document document) =>
-      NotesBlockEmbed(jsonEncode(document.toDelta().toJson()));
+  static NotesBlockEmbed fromDocument(Document document) {
+    try {
+      if (document.toDelta().isEmpty) {
+        throw Exception('Document is empty');
+      }
+      return NotesBlockEmbed(jsonEncode(document.toDelta().toJson()));
+    } catch (e) {
+      print('Error creating NotesBlockEmbed from Document: $e');
+      return const NotesBlockEmbed(''); // Return a default or empty embed
+    }
+  }
 
-  Document get document => Document.fromJson(jsonDecode(data));
+  Document get document {
+    try {
+      return Document.fromJson(jsonDecode(data));
+    } catch (e) {
+      print('Error decoding NotesBlockEmbed data: $e');
+      return Document(); // Return an empty document on error
+    }
+  }
 }
 
 class NotesEmbedBuilder extends EmbedBuilder {
@@ -24,24 +40,29 @@ class NotesEmbedBuilder extends EmbedBuilder {
 
   @override
   Widget build(BuildContext context, EmbedContext embedContext) {
-    final notes = NotesBlockEmbed(embedContext.node.value.data).document;
+    try {
+      final notes = NotesBlockEmbed(embedContext.node.value.data).document;
 
-    return Material(
-      color: Colors.transparent,
-      child: ListTile(
-        title: Text(
-          notes.toPlainText().replaceAll('\n', ' '),
-          maxLines: 3,
-          overflow: TextOverflow.ellipsis,
+      return Material(
+        color: Colors.transparent,
+        child: ListTile(
+          title: Text(
+            notes.toPlainText().replaceAll('\n', ' '),
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+          ),
+          leading: const Icon(Icons.notes),
+          onTap: () => addEditNote(context, document: notes),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+            side: const BorderSide(color: Colors.grey),
+          ),
         ),
-        leading: const Icon(Icons.notes),
-        onTap: () => addEditNote(context, document: notes),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-          side: const BorderSide(color: Colors.grey),
-        ),
-      ),
-    );
+      );
+    } catch (e) {
+      print('Error rendering NotesEmbedBuilder: $e');
+      return Container(); // Return an empty container or an error widget
+    }
   }
 }
 
