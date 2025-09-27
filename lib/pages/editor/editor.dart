@@ -1,12 +1,19 @@
-// lib/editor.dart — Quill-backed editor with JSON load/save
-import 'dart:convert';
+// lib/editor.dart — Quill-backed editor with JSON load/save + starter + download
 import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
+import 'package:flutter_quill_extensions/flutter_quill_extensions.dart';
+import 'package:secondstudent/pages/editor/customblocks.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import 'slash_menu.dart';
 import 'slash_menu_action.dart';
-import 'package:flutter/services.dart';
+import 'default_slash_menu_items.dart';
 
 class EditorScreen extends StatefulWidget {
   const EditorScreen({super.key});
@@ -18,8 +25,25 @@ class EditorScreen extends StatefulWidget {
 class _EditorScreenState extends State<EditorScreen> {
   static const String _prefsKey = 'editor_doc_delta';
 
+  /// A simple starter Quill Delta (JSON) for new docs
+  static const List<Map<String, dynamic>> _starterDelta = [
+    {
+      "insert": "SecondStudent\n",
+      "attributes": {"header": 1},
+    },
+    {"insert": "Type / to open the command menu.\n"},
+    {"insert": "\n"},
+    {"insert": "• Try a bullet list\n"},
+    {"insert": "1. Or a numbered list\n"},
+    {"insert": "\n"},
+    {
+      "insert": "``` Code block ```\n",
+      "attributes": {"code-block": true},
+    },
+    {"insert": "\n"},
+  ];
+
   late quill.QuillController _controller;
-  // Minimal editor: Quill manages focus/scroll in basic constructor
   StreamSubscription? _docSub;
 
   // Slash menu state
@@ -32,7 +56,7 @@ class _EditorScreenState extends State<EditorScreen> {
     super.initState();
     _controller = quill.QuillController.basic();
     _attachDocListener();
-    _loadFromPrefs();
+    _bootstrapDoc(); // load saved or start with template
   }
 
   void _attachDocListener() {
@@ -43,28 +67,66 @@ class _EditorScreenState extends State<EditorScreen> {
     });
   }
 
-  Future<void> _loadFromPrefs() async {
+  /// Load from prefs; if nothing valid, fall back to starter template.
+  Future<void> _bootstrapDoc() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_prefsKey);
-    if (raw == null || raw.isEmpty) return;
-    try {
-      final List<dynamic> ops = jsonDecode(raw) as List<dynamic>;
-      final newDoc = quill.Document.fromJson(ops);
-      _controller = quill.QuillController(
-        document: newDoc,
-        selection: const TextSelection.collapsed(offset: 0),
-      );
-      _attachDocListener();
-      if (mounted) setState(() {});
-    } catch (_) {
-      // ignore malformed stored data
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        final ops = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
+        final doc = quill.Document.fromJson(ops);
+        _controller = quill.QuillController(
+          document: doc,
+          selection: const TextSelection.collapsed(offset: 0),
+        );
+        _attachDocListener();
+        if (mounted) setState(() {});
+        return;
+      } catch (_) {
+        // ignore malformed stored data and fall through to starter
+      }
     }
+    _newFromStarter();
+  }
+
+  /// Replace the current document with the starter template.
+  void _newFromStarter() {
+    final doc = quill.Document.fromJson(_starterDelta);
+    _controller = quill.QuillController(
+      document: doc,
+      selection: const TextSelection.collapsed(offset: 0),
+    );
+    _attachDocListener();
+    if (mounted) setState(() {});
   }
 
   Future<void> _saveToPrefs() async {
     final prefs = await SharedPreferences.getInstance();
     final ops = _controller.document.toDelta().toJson();
     await prefs.setString(_prefsKey, jsonEncode(ops));
+  }
+
+  /// Export current doc’s Delta JSON (as bytes).
+  Uint8List _exportDeltaBytes() {
+    final ops = _controller.document.toDelta().toJson();
+    final jsonStr = jsonEncode(ops);
+    return Uint8List.fromList(utf8.encode(jsonStr));
+  }
+
+  /// Download/save the current Delta JSON using file_saver (works on web/desktop/mobile).
+  Future<void> _downloadDeltaJson() async {
+    final bytes = _exportDeltaBytes();
+    await FileSaver.instance.saveFile(
+      name: 'secondstudent',
+      bytes: bytes,
+      ext: 'quill.json',
+      mimeType: MimeType.json,
+    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Exported editor Delta as JSON')),
+      );
+    }
   }
 
   @override
@@ -75,15 +137,18 @@ class _EditorScreenState extends State<EditorScreen> {
   }
 
   // --- Slash menu helpers ---
-  List<SlashMenuItemData> get _allSlashItems => defaultSlashMenuItems;
+  List<SlashMenuItemData> get _allSlashItems =>
+      DefaultSlashMeuItems().defaultSlashMenuItems;
 
   List<SlashMenuItemData> get _filteredSlashItems {
     final q = _slashQuery.trim().toLowerCase();
     if (q.isEmpty) return _allSlashItems;
     return _allSlashItems
-        .where((it) =>
-            it.title.toLowerCase().contains(q) ||
-            it.subtitle.toLowerCase().contains(q))
+        .where(
+          (it) =>
+              it.title.toLowerCase().contains(q) ||
+              it.subtitle.toLowerCase().contains(q),
+        )
         .toList(growable: false);
   }
 
@@ -128,7 +193,8 @@ class _EditorScreenState extends State<EditorScreen> {
       _closeSlashMenu();
       return;
     }
-    final int lineStart = text.lastIndexOf('\n', (caret - 1).clamp(0, text.length - 1)) + 1;
+    final int lineStart =
+        text.lastIndexOf('\n', (caret - 1).clamp(0, text.length - 1)) + 1;
     final String lineBeforeCaret = text.substring(lineStart, caret);
 
     if (lineBeforeCaret.startsWith('/')) {
@@ -137,7 +203,10 @@ class _EditorScreenState extends State<EditorScreen> {
       if (_filteredSlashItems.isEmpty) {
         _slashSelectionIndex.value = 0;
       } else {
-        _slashSelectionIndex.value = _slashSelectionIndex.value.clamp(0, _filteredSlashItems.length - 1);
+        _slashSelectionIndex.value = _slashSelectionIndex.value.clamp(
+          0,
+          _filteredSlashItems.length - 1,
+        );
       }
     } else {
       _closeSlashMenu();
@@ -152,8 +221,10 @@ class _EditorScreenState extends State<EditorScreen> {
     }
     final text = _controller.document.toPlainText();
     final caret = selection.baseOffset;
-    final int lineStart = text.lastIndexOf('\n', (caret - 1).clamp(0, text.length - 1)) + 1;
+    final int lineStart =
+        text.lastIndexOf('\n', (caret - 1).clamp(0, text.length - 1)) + 1;
     final String lineBeforeCaret = text.substring(lineStart, caret);
+
     // Delete the "/..." trigger text
     if (lineBeforeCaret.startsWith('/')) {
       final int deleteLength = lineBeforeCaret.length;
@@ -190,12 +261,76 @@ class _EditorScreenState extends State<EditorScreen> {
         break;
       case SlashMenuAction.divider:
         final int index = _controller.selection.baseOffset;
-        // Simple text-based divider fallback
-        _controller.replaceText(index, 0, '\n---\n', const TextSelection.collapsed(offset: 0));
+        _controller.replaceText(
+          index,
+          0,
+          '\n---\n',
+          const TextSelection.collapsed(offset: 0),
+        );
+        break;
+      case SlashMenuAction.codeBlock:
+        _controller.formatSelection(quill.Attribute.codeBlock);
+        break;
+      case SlashMenuAction.addEditNote:
+        addEditNote(context);
+      case SlashMenuAction.image:
+        _promptForUrl(context, label: 'Image URL').then((url) {
+          if (url == null || url.isEmpty) return;
+          final idx = _controller.selection.baseOffset;
+          // Prefer embed if your flutter_quill version supports it
+          _controller.replaceText(
+            idx,
+            0,
+            quill.BlockEmbed.image(url),
+            const TextSelection.collapsed(offset: 0),
+          );
+        });
+        break;
+      case SlashMenuAction.video:
+        _promptForUrl(context, label: 'Video URL').then((url) {
+          if (url == null || url.isEmpty) return;
+          final idx = _controller.selection.baseOffset;
+          _controller.replaceText(
+            idx,
+            0,
+            quill.BlockEmbed.video(url),
+            const TextSelection.collapsed(offset: 0),
+          );
+        });
         break;
     }
 
     _closeSlashMenu();
+  }
+
+  Future<String?> _promptForUrl(
+    BuildContext context, {
+    required String label,
+  }) async {
+    final controller = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: Text(label),
+          content: TextField(
+            controller: controller,
+            decoration: const InputDecoration(hintText: 'https://...'),
+            autofocus: true,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(null),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
+              child: const Text('Insert'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent e) {
@@ -211,10 +346,12 @@ class _EditorScreenState extends State<EditorScreen> {
       _slashSelectionIndex.value = next;
       return KeyEventResult.handled;
     } else if (logicalKey == LogicalKeyboardKey.arrowUp) {
-      final next = (_slashSelectionIndex.value - 1 + filtered.length) % filtered.length;
+      final next =
+          (_slashSelectionIndex.value - 1 + filtered.length) % filtered.length;
       _slashSelectionIndex.value = next;
       return KeyEventResult.handled;
-    } else if (logicalKey == LogicalKeyboardKey.enter || logicalKey == LogicalKeyboardKey.numpadEnter) {
+    } else if (logicalKey == LogicalKeyboardKey.enter ||
+        logicalKey == LogicalKeyboardKey.numpadEnter) {
       _onSlashSelect(filtered[_slashSelectionIndex.value].action);
       return KeyEventResult.handled;
     } else if (logicalKey == LogicalKeyboardKey.escape) {
@@ -233,6 +370,24 @@ class _EditorScreenState extends State<EditorScreen> {
       onKeyEvent: _onKeyEvent,
       child: Column(
         children: [
+          // Tiny toolbar
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            child: Row(
+              children: [
+                FilledButton.tonal(
+                  onPressed: _newFromStarter,
+                  child: const Text('New from starter'),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: _downloadDeltaJson,
+                  child: const Text('Download JSON'),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
           Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -242,6 +397,33 @@ class _EditorScreenState extends State<EditorScreen> {
                   Positioned.fill(
                     child: quill.QuillEditor.basic(
                       controller: _controller,
+                      config: quill.QuillEditorConfig(
+                        showCursor: true,
+                        scrollable: true,
+                        autoFocus: true,
+                        placeholder: 'Type / to open the command menu.',
+                        embedBuilders: [
+                          ...FlutterQuillEmbeds.editorBuilders(
+                            imageEmbedConfig: QuillEditorImageEmbedConfig(
+                              imageProviderBuilder: (context, imageUrl) {
+                                // https://pub.dev/packages/flutter_quill_extensions#-image-assets
+                                if (imageUrl.startsWith('assets/')) {
+                                  return AssetImage(imageUrl);
+                                }
+                                return null;
+                              },
+                            ),
+                            videoEmbedConfig: QuillEditorVideoEmbedConfig(
+                              customVideoBuilder: (videoUrl, readOnly) {
+                                // To load YouTube videos https://github.com/singerdmx/flutter-quill/releases/tag/v10.8.0
+                                return null;
+                              },
+                            ),
+
+                          ),
+                        ],
+                        textInputAction: TextInputAction.newline,
+                      ),
                     ),
                   ),
                   if (_isSlashMenuOpen)

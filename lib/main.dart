@@ -36,6 +36,8 @@ void main() async {
 
   // ensure theme stream has a listener
   if (!mainStream.hasListener) {
+    WidgetsFlutterBinding.ensureInitialized();
+    await NotificationService.setup(); // must be awaited before runApp
     runApp(const MyApp());
   }
 }

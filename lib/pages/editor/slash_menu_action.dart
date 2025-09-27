@@ -7,4 +7,8 @@ enum SlashMenuAction {
   numberedList,
   toDoList,
   divider,
+  codeBlock,
+  image,
+  video,
+  addEditNote,
 }
