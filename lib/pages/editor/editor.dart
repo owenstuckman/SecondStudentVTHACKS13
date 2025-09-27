@@ -8,10 +8,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'package:flutter_quill_extensions/flutter_quill_extensions.dart';
+import 'package:secondstudent/pages/editor/customblocks.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'slash_menu.dart';
 import 'slash_menu_action.dart';
+import 'default_slash_menu_items.dart';
 
 class EditorScreen extends StatefulWidget {
   const EditorScreen({super.key});
@@ -25,13 +27,19 @@ class _EditorScreenState extends State<EditorScreen> {
 
   /// A simple starter Quill Delta (JSON) for new docs
   static const List<Map<String, dynamic>> _starterDelta = [
-    {"insert": "SecondStudent\n", "attributes": {"header": 1}},
+    {
+      "insert": "SecondStudent\n",
+      "attributes": {"header": 1},
+    },
     {"insert": "Type / to open the command menu.\n"},
     {"insert": "\n"},
     {"insert": "• Try a bullet list\n"},
     {"insert": "1. Or a numbered list\n"},
     {"insert": "\n"},
-    {"insert": "``` Code block ```\n", "attributes": {"code-block": true}},
+    {
+      "insert": "``` Code block ```\n",
+      "attributes": {"code-block": true},
+    },
     {"insert": "\n"},
   ];
 
@@ -129,15 +137,18 @@ class _EditorScreenState extends State<EditorScreen> {
   }
 
   // --- Slash menu helpers ---
-  List<SlashMenuItemData> get _allSlashItems => defaultSlashMenuItems;
+  List<SlashMenuItemData> get _allSlashItems =>
+      DefaultSlashMeuItems().defaultSlashMenuItems;
 
   List<SlashMenuItemData> get _filteredSlashItems {
     final q = _slashQuery.trim().toLowerCase();
     if (q.isEmpty) return _allSlashItems;
     return _allSlashItems
-        .where((it) =>
-            it.title.toLowerCase().contains(q) ||
-            it.subtitle.toLowerCase().contains(q))
+        .where(
+          (it) =>
+              it.title.toLowerCase().contains(q) ||
+              it.subtitle.toLowerCase().contains(q),
+        )
         .toList(growable: false);
   }
 
@@ -192,8 +203,10 @@ class _EditorScreenState extends State<EditorScreen> {
       if (_filteredSlashItems.isEmpty) {
         _slashSelectionIndex.value = 0;
       } else {
-        _slashSelectionIndex.value = _slashSelectionIndex.value
-            .clamp(0, _filteredSlashItems.length - 1);
+        _slashSelectionIndex.value = _slashSelectionIndex.value.clamp(
+          0,
+          _filteredSlashItems.length - 1,
+        );
       }
     } else {
       _closeSlashMenu();
@@ -258,6 +271,8 @@ class _EditorScreenState extends State<EditorScreen> {
       case SlashMenuAction.codeBlock:
         _controller.formatSelection(quill.Attribute.codeBlock);
         break;
+      case SlashMenuAction.addEditNote:
+        addEditNote(context);
       case SlashMenuAction.image:
         _promptForUrl(context, label: 'Image URL').then((url) {
           if (url == null || url.isEmpty) return;
@@ -288,8 +303,10 @@ class _EditorScreenState extends State<EditorScreen> {
     _closeSlashMenu();
   }
 
-  Future<String?> _promptForUrl(BuildContext context,
-      {required String label}) async {
+  Future<String?> _promptForUrl(
+    BuildContext context, {
+    required String label,
+  }) async {
     final controller = TextEditingController();
     return showDialog<String>(
       context: context,
@@ -307,8 +324,7 @@ class _EditorScreenState extends State<EditorScreen> {
               child: const Text('Cancel'),
             ),
             FilledButton(
-              onPressed: () =>
-                  Navigator.of(ctx).pop(controller.text.trim()),
+              onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
               child: const Text('Insert'),
             ),
           ],
@@ -386,7 +402,8 @@ class _EditorScreenState extends State<EditorScreen> {
                         scrollable: true,
                         autoFocus: true,
                         placeholder: 'Type / to open the command menu.',
-                        embedBuilders: FlutterQuillEmbeds.defaultEditorBuilders(),
+                        embedBuilders:
+                            FlutterQuillEmbeds.defaultEditorBuilders(),
                         textInputAction: TextInputAction.newline,
                       ),
                     ),

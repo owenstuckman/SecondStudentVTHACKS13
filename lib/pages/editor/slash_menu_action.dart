@@ -10,4 +10,5 @@ enum SlashMenuAction {
   codeBlock,
   image,
   video,
+  addEditNote,
 }
