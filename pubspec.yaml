@@ -50,6 +50,7 @@ dependencies:
   octo_image: ^2.1.0
   flutter_flip_card: ^0.0.6
   localstorage: ^6.0.0
+  calendar_view: ^1.4.0
 
 dev_dependencies:
   flutter_test:
