@@ -22,12 +22,17 @@ class _EditorScreenState extends State<EditorScreen> {
   final FocusNode _editorFocusNode = FocusNode();
   final GlobalKey _documentLayoutKey = GlobalKey();
 
+  // Slash menu state
   final ValueNotifier<_SlashMenuState> _slashMenuState =
       ValueNotifier<_SlashMenuState>(const _SlashMenuHidden());
   final ValueNotifier<int> _slashMenuSelectionIndex = ValueNotifier<int>(0);
   Offset _slashMenuAnchor = Offset.zero;
 
-  // ---- Bubble-sort style reordering (keyboard only) ----
+  // Floating reorder bubble (arrows) — anchored to caret line
+  Offset? _reorderBubbleAnchor; // in our Stack's local coords
+  bool _reorderBubbleVisible = false;
+
+  // ---------- Keyboard: bubble-sort style moves ----------
   se.DocumentKeyboardAction get _reorderKeyboardAction => ({
         required se.SuperEditorContext editContext,
         required KeyEvent keyEvent,
@@ -36,21 +41,15 @@ class _EditorScreenState extends State<EditorScreen> {
           return se.ExecutionInstruction.continueExecution;
         }
 
-        // Detect Option/Alt pressed (mac/win/linux)
         final pressed = HardwareKeyboard.instance.logicalKeysPressed;
         final altLike = pressed.contains(LogicalKeyboardKey.altLeft) ||
-            pressed.contains(LogicalKeyboardKey.altRight) ||
-            // also allow Meta as a backup on mac if you prefer:
-            // pressed.contains(LogicalKeyboardKey.metaLeft) ||
-            // pressed.contains(LogicalKeyboardKey.metaRight) ||
-            false;
+            pressed.contains(LogicalKeyboardKey.altRight);
 
         if (!altLike) return se.ExecutionInstruction.continueExecution;
 
         final isShift = pressed.contains(LogicalKeyboardKey.shiftLeft) ||
             pressed.contains(LogicalKeyboardKey.shiftRight);
 
-        // Alt+J/K (+ optional Shift) => move +/-1 or +/-2
         if (keyEvent.logicalKey == LogicalKeyboardKey.keyJ) {
           _moveCurrentNodeBy(isShift ? 2 : 1);
           return se.ExecutionInstruction.haltExecution;
@@ -63,7 +62,6 @@ class _EditorScreenState extends State<EditorScreen> {
         return se.ExecutionInstruction.continueExecution;
       };
 
-  // Core swap logic: moves the node that contains the caret by `delta` slots.
   void _moveCurrentNodeBy(int delta) {
     final selection = _composer.selection;
     if (selection == null) return;
@@ -72,21 +70,16 @@ class _EditorScreenState extends State<EditorScreen> {
     final fromIndex = _document.getNodeIndexById(nodeId);
     if (fromIndex == -1) return;
 
-    var toIndex = fromIndex + delta;
-    // Clamp to valid range
-    toIndex = toIndex.clamp(0, _document.length - 1);
-
+    var toIndex = (fromIndex + delta).clamp(0, _document.length - 1);
     if (toIndex == fromIndex) return;
 
     _editor.execute([
       se.MoveNodeRequest(nodeId: nodeId, newIndex: toIndex),
     ]);
 
-    // Keep the caret attached to the same node after the move.
-    // We place it at the same logical position if possible.
+    // Keep caret on same node, try to preserve text offset.
     final movedNode = _document.getNodeById(nodeId);
     if (movedNode is se.TextNode) {
-      // Try to preserve offset if selection was in text.
       final extentPos = selection.extent.nodePosition;
       final offset = extentPos is se.TextNodePosition ? extentPos.offset : 0;
       _editor.execute([
@@ -94,7 +87,9 @@ class _EditorScreenState extends State<EditorScreen> {
           se.DocumentSelection.collapsed(
             position: se.DocumentPosition(
               nodeId: movedNode.id,
-              nodePosition: se.TextNodePosition(offset: offset.clamp(0, movedNode.text.text.length)),
+              nodePosition: se.TextNodePosition(
+                offset: offset.clamp(0, movedNode.text.text.length),
+              ),
             ),
           ),
           se.SelectionChangeType.placeCaret,
@@ -102,7 +97,6 @@ class _EditorScreenState extends State<EditorScreen> {
         ),
       ]);
     } else {
-      // Fallback: place caret at start of the moved node.
       _editor.execute([
         se.ChangeSelectionRequest(
           se.DocumentSelection.collapsed(
@@ -116,9 +110,15 @@ class _EditorScreenState extends State<EditorScreen> {
         ),
       ]);
     }
+
+    // After layout shifts, update bubble anchor next frame.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _updateReorderBubbleAnchor();
+    });
   }
 
-  // ---- Slash menu open/close + actions ----
+  // ---------- Slash menu keyboard handling ----------
   se.DocumentKeyboardAction get _slashCommandKeyboardAction => ({
         required se.SuperEditorContext editContext,
         required KeyEvent keyEvent,
@@ -136,7 +136,6 @@ class _EditorScreenState extends State<EditorScreen> {
             _hideSlashMenu(insertSlashOnDismiss: true);
             return se.ExecutionInstruction.haltExecution;
           }
-
           if (itemCount > 0) {
             if (keyEvent.logicalKey == LogicalKeyboardKey.arrowDown) {
               _slashMenuSelectionIndex.value =
@@ -157,7 +156,7 @@ class _EditorScreenState extends State<EditorScreen> {
           }
         }
 
-        // Open slash menu only at start of a paragraph.
+        // Open: only when caret is at start of a paragraph.
         if (keyEvent.logicalKey == LogicalKeyboardKey.slash &&
             keyEvent.character == '/') {
           final selection = editContext.composer.selection;
@@ -193,6 +192,7 @@ class _EditorScreenState extends State<EditorScreen> {
         return se.ExecutionInstruction.continueExecution;
       };
 
+  // ---------- Lifecycle ----------
   @override
   void initState() {
     super.initState();
@@ -218,11 +218,15 @@ class _EditorScreenState extends State<EditorScreen> {
       composer: _composer,
     );
 
-    _composer.selectionNotifier.addListener(_handleSelectionChange);
+    _composer.selectionNotifier.addListener(() {
+      _handleSelectionChange();
+      _updateReorderBubbleAnchor();
+    });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _editorFocusNode.requestFocus();
+      _updateReorderBubbleAnchor();
     });
   }
 
@@ -235,6 +239,41 @@ class _EditorScreenState extends State<EditorScreen> {
     super.dispose();
   }
 
+  // ---------- Reorder bubble placement ----------
+  void _updateReorderBubbleAnchor() {
+    final selection = _composer.selection;
+    final layout = _documentLayoutKey.currentState as se.DocumentLayout?;
+    if (selection == null || layout == null) {
+      setState(() {
+        _reorderBubbleAnchor = null;
+        _reorderBubbleVisible = false;
+      });
+      return;
+    }
+
+    final rect = layout.getRectForPosition(selection.extent);
+    if (rect == null) {
+      setState(() {
+        _reorderBubbleAnchor = null;
+        _reorderBubbleVisible = false;
+      });
+      return;
+    }
+
+    final topLeftGlobal =
+        layout.getGlobalOffsetFromDocumentOffset(rect.topLeft);
+    final stackBox = context.findRenderObject() as RenderBox?;
+    if (stackBox == null) return;
+
+    final local = stackBox.globalToLocal(topLeftGlobal);
+
+    setState(() {
+      _reorderBubbleAnchor = local;
+      _reorderBubbleVisible = true;
+    });
+  }
+
+  // ---------- Slash menu helpers ----------
   void _handleSelectionChange() {
     final state = _slashMenuState.value;
     if (state is _SlashMenuVisible &&
@@ -354,7 +393,9 @@ class _EditorScreenState extends State<EditorScreen> {
 
       case SlashMenuAction.divider:
         _editor.execute([
-          se.InsertNodeAtCaretRequest(node: se.HorizontalRuleNode(id: se.Editor.createNodeId())),
+          se.InsertNodeAtCaretRequest(
+            node: se.HorizontalRuleNode(id: se.Editor.createNodeId()),
+          ),
         ]);
         break;
     }
@@ -362,25 +403,47 @@ class _EditorScreenState extends State<EditorScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // No handles, no line numbers, no drag overlay — just the editor and the slash menu.
+    // Order: SuperEditor (with scroll listener), floating reorder bubble, slash menu.
     return Stack(
       children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 56, right: 24),
-          child: se.SuperEditor(
-            editor: _editor,
-            documentLayoutKey: _documentLayoutKey,
-            inputSource: se.TextInputSource.keyboard,
-            focusNode: _editorFocusNode,
-            keyboardActions: [
-              _reorderKeyboardAction,     // <-- bubble-sort style moves
-              _slashCommandKeyboardAction,
-              ...se.defaultKeyboardActions,
-            ],
+        NotificationListener<ScrollNotification>(
+          onNotification: (n) {
+            // Keep bubble glued to the caret line on scroll.
+            _updateReorderBubbleAnchor();
+            return false;
+          },
+          child: Padding(
+            padding: const EdgeInsets.only(left: 56, right: 24),
+            child: se.SuperEditor(
+              editor: _editor,
+              documentLayoutKey: _documentLayoutKey,
+              inputSource: se.TextInputSource.keyboard,
+              focusNode: _editorFocusNode,
+              keyboardActions: [
+                _reorderKeyboardAction,
+                _slashCommandKeyboardAction,
+                ...se.defaultKeyboardActions,
+              ],
+            ),
           ),
         ),
 
-        // Slash menu overlay
+        // Floating reorder bubble (Up2 / Up1 / Down1 / Down2 / Close)
+        if (_reorderBubbleVisible && _reorderBubbleAnchor != null)
+          Positioned(
+            // Stick in the left gutter regardless of caret X.
+            left: 12,
+            top: _reorderBubbleAnchor!.dy - 6,
+            child: _ReorderBubble(
+              onUp1: () => _moveCurrentNodeBy(-1),
+              onUp2: () => _moveCurrentNodeBy(-2),
+              onDown1: () => _moveCurrentNodeBy(1),
+              onDown2: () => _moveCurrentNodeBy(2),
+              onClose: () => setState(() => _reorderBubbleVisible = false),
+            ),
+          ),
+
+        // Slash menu overlay (unchanged)
         ValueListenableBuilder<_SlashMenuState>(
           valueListenable: _slashMenuState,
           builder: (context, state, _) {
@@ -388,7 +451,8 @@ class _EditorScreenState extends State<EditorScreen> {
 
             final renderBox = context.findRenderObject() as RenderBox?;
             final overlaySize = renderBox?.size ?? Size.zero;
-            final menuHeight = slashMenuTotalHeight(defaultSlashMenuItems.length);
+            final menuHeight =
+                slashMenuTotalHeight(defaultSlashMenuItems.length);
             const menuWidth = defaultSlashMenuMaxWidth;
 
             double dx = _slashMenuAnchor.dx - menuWidth / 2;
@@ -419,7 +483,7 @@ class _EditorScreenState extends State<EditorScreen> {
   }
 }
 
-// ---- Local slash menu state (kept here; UI in slash_menu.dart) ----
+// ---------- Local slash menu state ----------
 abstract class _SlashMenuState {
   const _SlashMenuState();
 }
@@ -431,4 +495,67 @@ class _SlashMenuHidden extends _SlashMenuState {
 class _SlashMenuVisible extends _SlashMenuState {
   const _SlashMenuVisible(this.triggerPosition);
   final se.DocumentPosition triggerPosition;
+}
+
+// ---------- Floating reorder bubble UI ----------
+class _ReorderBubble extends StatelessWidget {
+  const _ReorderBubble({
+    required this.onUp1,
+    required this.onUp2,
+    required this.onDown1,
+    required this.onDown2,
+    required this.onClose,
+  });
+
+  final VoidCallback onUp1, onUp2, onDown1, onDown2, onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      elevation: 6,
+      color: theme.colorScheme.surface,
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: 'Up 2',
+              icon: const Icon(Icons.keyboard_double_arrow_up, size: 18),
+              onPressed: onUp2,
+              splashRadius: 16,
+            ),
+            IconButton(
+              tooltip: 'Up 1',
+              icon: const Icon(Icons.keyboard_arrow_up, size: 18),
+              onPressed: onUp1,
+              splashRadius: 16,
+            ),
+            const SizedBox(width: 4),
+            IconButton(
+              tooltip: 'Down 1',
+              icon: const Icon(Icons.keyboard_arrow_down, size: 18),
+              onPressed: onDown1,
+              splashRadius: 16,
+            ),
+            IconButton(
+              tooltip: 'Down 2',
+              icon: const Icon(Icons.keyboard_double_arrow_down, size: 18),
+              onPressed: onDown2,
+              splashRadius: 16,
+            ),
+            const SizedBox(width: 4),
+            IconButton(
+              tooltip: 'Hide',
+              icon: const Icon(Icons.close, size: 16),
+              onPressed: onClose,
+              splashRadius: 14,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
