@@ -52,6 +52,7 @@ dependencies:
   webview_flutter: ^4.13.0
   image_picker: ^1.2.0
   octo_image: ^2.1.0
+  flutter_flip_card: ^0.0.6
 
 dev_dependencies:
   flutter_test:
