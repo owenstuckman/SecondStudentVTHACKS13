@@ -98,7 +98,7 @@ class _CalendarWidgetState extends State<CalendarWidget> {
 
     try {
       final Uri coursesUrl = Uri.parse(
-        '$domain/api/v1/courses?state[]=available&per_page=100',
+        '$domain/api/v1/courses?enrollment_type=student&enrollment_state=active',
       );
       final List<dynamic> courses = await CanvasFullQuery.fetchAllPages(
         coursesUrl,

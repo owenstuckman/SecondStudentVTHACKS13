@@ -1,15 +1,13 @@
 class Class {
-  final String id;
-  final String title;
-  final String description;
-  final String teacher;
+  final int id;
+  final String name;
   final String course_code;
+  final String created_at;
 
   Class({
     required this.id,
-    required this.title,
-    required this.description,
-    required this.teacher,
+    required this.name,
     required this.course_code,
+    required this.created_at,
   });
 }
