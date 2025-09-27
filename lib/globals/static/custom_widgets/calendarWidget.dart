@@ -106,6 +106,20 @@ class _CalendarWidgetState extends State<CalendarWidget> {
                     labelText: 'Event Name',
                   ),
                 ),
+                SizedBox(height: 10),
+                TextField(
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(),
+                    labelText: 'Event Description',
+                  ),
+                ),
+                SizedBox(height: 10),
+                TextField(
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(),
+                    labelText: 'Event Color',
+                  ),
+                ),
               ],
             ),
           ),

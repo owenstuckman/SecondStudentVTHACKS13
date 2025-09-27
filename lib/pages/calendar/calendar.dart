@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:calendar_view/calendar_view.dart';
-import 'package:secondstudent/widgets/calendarWidget.dart';
+import 'package:secondstudent/globals/static/custom_widgets/calendarWidget.dart';
 
 class Calendar extends StatelessWidget {
   @override

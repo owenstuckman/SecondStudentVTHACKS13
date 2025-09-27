@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:secondstudent/types/class.dart';
+import 'package:secondstudent/globals/static/types/class.dart';
 
 class ClassesCard extends StatelessWidget {
   final Class _class;
