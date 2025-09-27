@@ -35,8 +35,9 @@ class IframeEmbedBuilder implements EmbedBuilder {
     try {
       final m = IframeBlockEmbed.fromRaw(embedContext.node.value.data).dataMap;
       final url = (m['url'] ?? '').toString();
-      final height =
-          (m['height'] is num) ? (m['height'] as num).toDouble() : 420.0;
+      final height = (m['height'] is num)
+          ? (m['height'] as num).toDouble()
+          : 420.0;
       if (url.isEmpty) return _errorBox(context, 'Empty iframe URL');
 
       // allowlist (expand as you like)
@@ -63,34 +64,49 @@ class IframeEmbedBuilder implements EmbedBuilder {
           : _buildPlatformWebView(url, height, context);
 
       // 👇 Wrap with EmbedProxy AND unfocus editor on pointer down so gestures pass through
-      return EmbedProxy(
-        Listener(
-          behavior: HitTestBehavior.opaque,
-          onPointerDown: (_) {
-            final scope = FocusScope.of(context);
-            if (scope.hasFocus) scope.unfocus();
-          },
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: SizedBox(
-              height: height,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  border: Border.all(color: Theme.of(context).dividerColor),
-                  borderRadius: BorderRadius.circular(10),
+      if (kIsWeb) {
+        return EmbedProxy(
+          Listener(
+            behavior: HitTestBehavior.opaque,
+            onPointerDown: (_) {
+              final scope = FocusScope.of(context);
+              if (scope.hasFocus) scope.unfocus();
+            },
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: SizedBox(
+                height: height,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Theme.of(context).dividerColor),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: view,
                 ),
-                child: view,
               ),
             ),
           ),
-        ),
-      );
+        );
+      } else {
+        // macOS/iOS/Android: avoid Clip/Opacity around platform views to prevent black box
+        return EmbedProxy(
+          Listener(
+            behavior: HitTestBehavior.opaque,
+            onPointerDown: (_) => FocusScope.of(context).unfocus(),
+            child: SizedBox(height: height, child: view),
+          ),
+        );
+      }
     } catch (e) {
       return _errorBox(context, 'Embed failed:\n$e');
     }
   }
 
-  Widget _buildPlatformWebView(String url, double height, BuildContext context) {
+  Widget _buildPlatformWebView(
+    String url,
+    double height,
+    BuildContext context,
+  ) {
     final controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..enableZoom(true)
@@ -100,13 +116,13 @@ class IframeEmbedBuilder implements EmbedBuilder {
   }
 
   Widget _errorBox(BuildContext context, String msg) => Container(
-        height: 140,
-        padding: const EdgeInsets.all(12),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          border: Border.all(color: Theme.of(context).colorScheme.error),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Text(msg, textAlign: TextAlign.center),
-      );
+    height: 140,
+    padding: const EdgeInsets.all(12),
+    alignment: Alignment.center,
+    decoration: BoxDecoration(
+      border: Border.all(color: Theme.of(context).colorScheme.error),
+      borderRadius: BorderRadius.circular(10),
+    ),
+    child: Text(msg, textAlign: TextAlign.center),
+  );
 }
