@@ -3,16 +3,17 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:super_editor/super_editor.dart' as se;
 
-/// Notion-like drag-and-drop layer for Super Editor.
-/// Put this ABOVE SuperEditor in a Stack (ideally as the LAST child so it sits on top).
+/// Drag-to-reorder handles for Super Editor.
+/// You mount this in a root Overlay (you're already doing that in editor.dart).
 class NodeDragLayer extends StatefulWidget {
   const NodeDragLayer({
     super.key,
     required this.document,
     required this.editor,
     required this.documentLayoutKey,
-    this.gutterWidth = 28,
-    this.gutterPadding = 6,
+    this.handleWidth = 28,
+    this.handlePadding = 6,
+    this.handleGap = 8, // gap between node's left edge and the handle
     this.handleBuilder,
     this.onReorder,
   });
@@ -21,16 +22,11 @@ class NodeDragLayer extends StatefulWidget {
   final se.Editor editor;
   final GlobalKey documentLayoutKey;
 
-  /// Fixed left gutter width where the handles live.
-  final double gutterWidth;
+  final double handleWidth;
+  final double handlePadding;
+  final double handleGap;
 
-  /// Padding inside the gutter around each handle.
-  final double gutterPadding;
-
-  /// Optional custom handle widget builder.
   final Widget Function(BuildContext, bool isDragging)? handleBuilder;
-
-  /// Callback after reorder: (fromIndex, toIndex).
   final void Function(int from, int to)? onReorder;
 
   @override
@@ -42,7 +38,6 @@ class _NodeDragLayerState extends State<NodeDragLayer> {
   int? _targetSlot;
   int? _lastSlot;
   _DropDirection _dragDirection = _DropDirection.neutral;
-  String? _hoveredNodeId;
 
   late final se.DocumentChangeListener _docListener;
 
@@ -50,7 +45,7 @@ class _NodeDragLayerState extends State<NodeDragLayer> {
   void initState() {
     super.initState();
     _docListener = (se.DocumentChangeLog _) {
-      if (mounted) setState(() {});
+      if (mounted) setState(() {}); // repaint when the doc changes
     };
     widget.document.addListener(_docListener);
   }
@@ -78,7 +73,7 @@ class _NodeDragLayerState extends State<NodeDragLayer> {
     return null;
   }
 
-  /// Rect for a node, in GLOBAL coordinates.
+  /// Rect for a node in **global** coordinates, using the node's upstream (or text 0) position.
   Rect? _nodeRectGlobal(String nodeId) {
     final layout = _layout;
     if (layout == null) return null;
@@ -90,13 +85,15 @@ class _NodeDragLayerState extends State<NodeDragLayer> {
         ? const se.TextNodePosition(offset: 0)
         : const se.UpstreamDownstreamNodePosition.upstream();
 
-    try {
-      return layout.getRectForPosition(
-        se.DocumentPosition(nodeId: nodeId, nodePosition: pos),
-      );
-    } catch (_) {
-      return null;
-    }
+    final localRect = layout.getRectForPosition(
+      se.DocumentPosition(nodeId: nodeId, nodePosition: pos),
+    );
+    if (localRect == null) return null;
+
+    // Convert from document layout space -> global.
+    final tl = layout.getGlobalOffsetFromDocumentOffset(localRect.topLeft);
+    final br = layout.getGlobalOffsetFromDocumentOffset(localRect.bottomRight);
+    return Rect.fromPoints(tl, br);
   }
 
   List<se.DocumentNode> _allNodes() {
@@ -108,11 +105,8 @@ class _NodeDragLayerState extends State<NodeDragLayer> {
     return out;
   }
 
-  /// Compute the insertion slot (0..len) for a given GLOBAL y.
+  /// Slot (0..len) where the drop line should appear for a given **global** Y.
   int? _computeInsertionSlot(double globalDy) {
-    final layout = _layout;
-    if (layout == null) return null;
-
     final nodes = _allNodes();
     if (nodes.isEmpty) return 0;
 
@@ -187,15 +181,13 @@ class _NodeDragLayerState extends State<NodeDragLayer> {
     var toIndex = _targetSlot!;
 
     if (toIndex > fromIndex) {
-      toIndex -= 1; // removing first shifts the target down by 1
+      toIndex -= 1; // remove-then-insert shift
     }
 
     final maxIndex = widget.document.length - 1;
     if (toIndex != fromIndex && toIndex >= 0 && toIndex <= maxIndex) {
       final node = widget.document.getNodeAt(fromIndex)!;
-      widget.editor.execute([
-        se.MoveNodeRequest(nodeId: node.id, newIndex: toIndex),
-      ]);
+      widget.editor.execute([se.MoveNodeRequest(nodeId: node.id, newIndex: toIndex)]);
       widget.onReorder?.call(fromIndex, toIndex);
     }
 
@@ -214,17 +206,14 @@ class _NodeDragLayerState extends State<NodeDragLayer> {
   double? _indicatorYLocal(RenderBox stackBox, List<se.DocumentNode> nodes) {
     if (_targetSlot == null) return null;
 
-    // Slot 0: above first node
     if (_targetSlot == 0 && nodes.isNotEmpty) {
       final r = _nodeRectGlobal(nodes.first.id);
       return r == null ? null : stackBox.globalToLocal(r.topLeft).dy;
     }
-    // Slot len: below last node
     if (_targetSlot == nodes.length && nodes.isNotEmpty) {
       final r = _nodeRectGlobal(nodes.last.id);
       return r == null ? null : stackBox.globalToLocal(r.bottomLeft).dy;
     }
-    // Between two nodes
     if (_targetSlot! > 0 && _targetSlot! < nodes.length) {
       final above = _nodeRectGlobal(nodes[_targetSlot! - 1].id);
       final below = _nodeRectGlobal(nodes[_targetSlot!].id);
@@ -245,23 +234,8 @@ class _NodeDragLayerState extends State<NodeDragLayer> {
 
     final nodes = _allNodes();
 
-    // Left gutter background (optional, subtle)
-    final gutter = Positioned(
-      left: 0,
-      top: 0,
-      bottom: 0,
-      width: widget.gutterWidth,
-      child: IgnorePointer(
-        ignoring: true,
-        child: Container(
-          color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.02),
-        ),
-      ),
-    );
-
-    // Hover regions and gutter cells
-    final rowHoverRegions = <Widget>[];
-    final gutterCells = <Widget>[];
+    // Per-node handles, positioned beside each node's left edge.
+    final handles = <Widget>[];
     for (var i = 0; i < nodes.length; i++) {
       final node = nodes[i];
       final r = _nodeRectGlobal(node.id);
@@ -269,38 +243,23 @@ class _NodeDragLayerState extends State<NodeDragLayer> {
 
       final topLeftLocal = stackBox.globalToLocal(r.topLeft);
       final bottomLeftLocal = stackBox.globalToLocal(Offset(r.left, r.bottom));
+
+      final top = topLeftLocal.dy;
       final height = math.max(24.0, bottomLeftLocal.dy - topLeftLocal.dy);
 
-      // Full-width invisible hover region for this row
-      rowHoverRegions.add(Positioned(
-        left: 0,
-        right: 0,
-        top: topLeftLocal.dy,
-        height: height,
-        child: MouseRegion(
-          opaque: false,
-          onEnter: (_) => setState(() => _hoveredNodeId = node.id),
-          onExit: (_) {
-            if (_hoveredNodeId == node.id) {
-              setState(() => _hoveredNodeId = null);
-            }
-          },
-          child: const SizedBox.expand(),
-        ),
-      ));
+      // Place the handle just to the LEFT of this node's left edge.
+      final handleLeft = (topLeftLocal.dx - widget.handleGap - widget.handleWidth).clamp(0.0, double.infinity);
 
-      // Gutter cell content (handle or line number)
-      gutterCells.add(Positioned(
-        left: 0,
-        top: topLeftLocal.dy,
-        width: widget.gutterWidth,
+      handles.add(Positioned(
+        left: handleLeft,
+        top: top,
+        width: widget.handleWidth,
         height: height,
-        child: _GutterCell(
+        child: _Handle(
           nodeId: node.id,
           index: i,
-          padding: widget.gutterPadding,
+          padding: widget.handlePadding,
           isDragging: _draggingNodeId == node.id,
-          isHovered: _hoveredNodeId == node.id,
           builder: widget.handleBuilder,
           onDragStart: _onDragStart,
           onDragUpdate: _onDragUpdate,
@@ -344,34 +303,30 @@ class _NodeDragLayerState extends State<NodeDragLayer> {
       }
     }
 
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        gutter,
-        // Absorb clicks in the gutter area so the editor below doesn't claim focus.
-        Positioned(
-          left: 0,
-          top: 0,
-          bottom: 0,
-          width: widget.gutterWidth,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () {},
-          ),
-        ),
-        // While dragging, capture pointer updates anywhere to continue the drag
-        // and prevent the editor from handling clicks.
-        if (_draggingNodeId != null)
-          Positioned.fill(
+    // While dragging, capture movement anywhere so the editor doesn’t steal gestures.
+    final dragCapture = (_draggingNodeId != null)
+        ? Positioned.fill(
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onPanUpdate: _onDragUpdate,
               onPanEnd: (_) => _onDragEnd(),
             ),
+          )
+        : const SizedBox.shrink();
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Positioned.fill(
+          child: DragTarget<int>(
+            onWillAcceptWithDetails: (_) => true,
+            onAcceptWithDetails: (_) => _onDragEnd(),
+            builder: (context, _, __) => const SizedBox.expand(),
           ),
+        ),
         indicator,
-        ...rowHoverRegions,
-        ...gutterCells,
+        ...handles,
+        dragCapture,
       ],
     );
   }
@@ -386,13 +341,12 @@ class _Lane {
   final double bottom;
 }
 
-class _GutterCell extends StatelessWidget {
-  const _GutterCell({
+class _Handle extends StatelessWidget {
+  const _Handle({
     required this.nodeId,
     required this.index,
     required this.padding,
     required this.isDragging,
-    required this.isHovered,
     required this.onDragStart,
     required this.onDragUpdate,
     required this.onDragEnd,
@@ -403,7 +357,6 @@ class _GutterCell extends StatelessWidget {
   final int index;
   final double padding;
   final bool isDragging;
-  final bool isHovered;
   final void Function(String nodeId, int index, double globalDy) onDragStart;
   final void Function(DragUpdateDetails) onDragUpdate;
   final VoidCallback onDragEnd;
@@ -411,7 +364,7 @@ class _GutterCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final handle = builder?.call(context, isDragging) ??
+    final child = builder?.call(context, isDragging) ??
         Container(
           alignment: Alignment.center,
           margin: EdgeInsets.all(padding),
@@ -425,30 +378,14 @@ class _GutterCell extends StatelessWidget {
           child: const Icon(Icons.drag_indicator, size: 18),
         );
 
-    final lineNumberText = Text(
-      "${index + 1}",
-      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            color: Theme.of(context).colorScheme.outline,
-          ),
-      textAlign: TextAlign.right,
-    );
-
-    final content = (isHovered || isDragging)
-        ? handle
-        : Container(
-            alignment: Alignment.centerRight,
-            padding: EdgeInsets.symmetric(horizontal: padding),
-            child: lineNumberText,
-          );
-
     return MouseRegion(
-      cursor: (isHovered || isDragging) ? SystemMouseCursors.grab : SystemMouseCursors.basic,
+      cursor: SystemMouseCursors.grab,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onPanStart: (details) => onDragStart(nodeId, index, details.globalPosition.dy),
         onPanUpdate: onDragUpdate,
         onPanEnd: (_) => onDragEnd(),
-        child: content,
+        child: child,
       ),
     );
   }
