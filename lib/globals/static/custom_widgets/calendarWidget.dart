@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:math';
 import 'package:secondstudent/globals/static/extensions/local-storage-wrap.dart';
+import 'package:secondstudent/globals/static/extensions/canvasFullQuery.dart';
 
 class CalendarWidget extends StatefulWidget {
   final String description;
@@ -99,7 +100,10 @@ class _CalendarWidgetState extends State<CalendarWidget> {
       final Uri coursesUrl = Uri.parse(
         '$domain/api/v1/courses?state[]=available&per_page=100',
       );
-      final List<dynamic> courses = await _fetchAllPages(coursesUrl, headers);
+      final List<dynamic> courses = await CanvasFullQuery.fetchAllPages(
+        coursesUrl,
+        headers,
+      );
 
       for (final course in courses) {
         if (course is! Map) continue;
@@ -112,7 +116,7 @@ class _CalendarWidgetState extends State<CalendarWidget> {
         final Uri assignmentsUrl = Uri.parse(
           '$domain/api/v1/courses/$courseId/assignments?per_page=100',
         );
-        final List<dynamic> assignments = await _fetchAllPages(
+        final List<dynamic> assignments = await CanvasFullQuery.fetchAllPages(
           assignmentsUrl,
           headers,
         );
@@ -154,46 +158,6 @@ class _CalendarWidgetState extends State<CalendarWidget> {
     } catch (_) {
       // Swallow errors silently for now
     }
-  }
-
-  Future<List<dynamic>> _fetchAllPages(
-    Uri initialUrl,
-    Map<String, String> headers,
-  ) async {
-    final List<dynamic> all = [];
-    Uri? url = initialUrl;
-    while (url != null) {
-      try {
-        final response = await http.get(url, headers: headers);
-        if (response.statusCode != 200) break;
-        final body = jsonDecode(response.body);
-        if (body is List) {
-          all.addAll(body);
-        }
-        url = _nextLinkFromHeader(response.headers['link']);
-      } catch (_) {
-        break;
-      }
-    }
-    return all;
-  }
-
-  Uri? _nextLinkFromHeader(String? linkHeader) {
-    if (linkHeader == null) return null;
-    final parts = linkHeader.split(',');
-    for (final rawPart in parts) {
-      final part = rawPart.trim();
-      final urlMatch = RegExp(r'<([^>]+)>').firstMatch(part);
-      final relMatch = RegExp(r'rel="([^"]+)"').firstMatch(part);
-      if (urlMatch != null && relMatch != null) {
-        final rel = relMatch.group(1);
-        if (rel == 'next') {
-          final urlStr = urlMatch.group(1);
-          if (urlStr != null) return Uri.parse(urlStr);
-        }
-      }
-    }
-    return null;
   }
 
   Widget _headerBuilder(DateTime date) {
