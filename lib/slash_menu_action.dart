@@ -5,6 +5,6 @@ enum SlashMenuAction {
   heading3,
   bulletList,
   numberedList,
-  quote,
+  toDoList,
   divider,
 }
