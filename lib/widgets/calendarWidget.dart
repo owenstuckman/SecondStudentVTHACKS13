@@ -88,6 +88,32 @@ class _CalendarWidgetState extends State<CalendarWidget> {
     setState(() {});
   }
 
+  Widget _dialogBuilder(DateTime date) {
+    final ColorScheme colorScheme = Theme.of(context).colorScheme;
+    return Dialog(
+      child: Container(
+        height: MediaQuery.of(context).size.height * 0.3,
+        width: MediaQuery.of(context).size.width * 0.3,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              children: [
+                SizedBox(height: 10),
+                TextField(
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(),
+                    labelText: 'Event Name',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final ColorScheme colorScheme = Theme.of(context).colorScheme;
@@ -125,8 +151,8 @@ class _CalendarWidgetState extends State<CalendarWidget> {
           MonthView(
             key: monthViewKey,
             // Users can swipe/drag horizontally to change months (built-in behavior)
-            minMonth: DateTime(now.year, now.month - 1),
-            maxMonth: DateTime(now.year, now.month + 1),
+            minMonth: DateTime(now.year, now.month - 2),
+            maxMonth: DateTime(now.year, now.month + 3),
             initialMonth: DateTime(now.year, now.month),
             startDay: WeekDays.monday,
             headerBuilder: _headerBuilder,
@@ -199,7 +225,8 @@ class _CalendarWidgetState extends State<CalendarWidget> {
             child: FloatingActionButton(
               mini: true,
               backgroundColor: colorScheme.primary,
-              onPressed: _addEventForToday,
+              onPressed: () => showDialog(
+                  context: context, builder: (context) => _dialogBuilder(now)),
               child: Icon(Icons.add, color: colorScheme.onPrimary),
             ),
           ),
