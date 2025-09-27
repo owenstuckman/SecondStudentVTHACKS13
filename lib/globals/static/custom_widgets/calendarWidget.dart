@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:calendar_view/calendar_view.dart';
+import 'package:secondstudent/globals/static/custom_widgets/styled_button.dart';
+import 'package:secondstudent/globals/static/types/assignment.dart';
 
 class CalendarWidget extends StatefulWidget {
   final String description;
@@ -18,6 +20,10 @@ final GlobalKey<DayViewState> dayViewKey = GlobalKey<DayViewState>();
 class _CalendarWidgetState extends State<CalendarWidget> {
   late EventController _eventController;
   int _eventId = 1;
+
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _descriptionController = TextEditingController();
+  DateTime? _selectedDate;
 
   @override
   void initState() {
@@ -44,6 +50,8 @@ class _CalendarWidgetState extends State<CalendarWidget> {
 
   @override
   void dispose() {
+    _nameController.dispose();
+    _descriptionController.dispose();
     _eventController.dispose();
     super.dispose();
   }
@@ -77,19 +85,24 @@ class _CalendarWidgetState extends State<CalendarWidget> {
     );
   }
 
-  void _addEventForToday() {
-    final now = DateTime.now();
+  void _addEvent({
+    required String title,
+    required String description,
+    required DateTime date,
+  }) {
     final newEvent = CalendarEventData(
-      title: 'New Event ${_eventId++}',
-      date: DateTime(now.year, now.month, now.day),
-      event: 'New Event',
+      title: title.isEmpty ? 'New Event ${_eventId++}' : title,
+      date: DateTime(date.year, date.month, date.day),
+      event: description,
     );
     _eventController.add(newEvent);
     setState(() {});
+    Navigator.of(context).pop();
   }
 
   Widget _dialogBuilder(DateTime date) {
-    final ColorScheme colorScheme = Theme.of(context).colorScheme;
+    final DateTime displayDate = _selectedDate ?? date;
+
     return Dialog(
       child: Container(
         height: MediaQuery.of(context).size.height * 0.3,
@@ -100,25 +113,61 @@ class _CalendarWidgetState extends State<CalendarWidget> {
             child: Column(
               children: [
                 SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${displayDate.year}-${displayDate.month.toString().padLeft(2, '0')}-${displayDate.day.toString().padLeft(2, '0')}',
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.calendar_today),
+                      onPressed: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: displayDate,
+                          firstDate: DateTime(2000),
+                          lastDate: DateTime(2100),
+                        );
+                        if (picked != null) {
+                          setState(() {
+                            _selectedDate = picked;
+                          });
+                        }
+                      },
+                    ),
+                  ],
+                ),
+                SizedBox(height: 10),
                 TextField(
-                  decoration: InputDecoration(
+                  controller: _nameController,
+                  decoration: const InputDecoration(
                     border: OutlineInputBorder(),
                     labelText: 'Event Name',
                   ),
                 ),
                 SizedBox(height: 10),
                 TextField(
-                  decoration: InputDecoration(
+                  controller: _descriptionController,
+                  decoration: const InputDecoration(
                     border: OutlineInputBorder(),
                     labelText: 'Event Description',
                   ),
                 ),
                 SizedBox(height: 10),
-                TextField(
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(),
-                    labelText: 'Event Color',
-                  ),
+                StyledButton(
+                  text: 'Add Event',
+                  onTap: () {
+                    _addEvent(
+                      title: _nameController.text.trim(),
+                      description: _descriptionController.text.trim(),
+                      date: _selectedDate ?? date,
+                    );
+                    _nameController.clear();
+                    _descriptionController.clear();
+                    _selectedDate = null;
+                  },
                 ),
               ],
             ),
