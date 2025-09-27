@@ -18,6 +18,7 @@ import 'package:secondstudent/pages/calendar/calendar.dart';
 import 'package:secondstudent/pages/todo/todo.dart';
 import 'file_storage.dart';
 import 'package:secondstudent/pages/editor/workspace.dart';
+import 'package:secondstudent/pages/marketplace/marketplace.dart';
 
 /*
 Home Page Class
@@ -81,6 +82,12 @@ class HomePageState extends State<HomePage> {
       filled: Icons.check_box,
       outlined: Icons.check_box_outlined,
       label: 'To-Do',
+      lock: false,
+    ),
+    _NavItem(
+      filled: Icons.store,
+      outlined: Icons.store_outlined,
+      label: 'Marketplace',
       lock: false,
     ),
     _NavItem(
@@ -190,7 +197,7 @@ class HomePageState extends State<HomePage> {
                   controller: _pageController,
                   onPageChanged: (index) => setState(() => pageIndex = index),
                   // ORDER must match _navItems above
-                  children: [EditorWorkspace(), Calendar(), ToDo(), Classes()],
+                  children: [EditorWorkspace(), Calendar(), ToDo(), Marketplace(), Classes()],
                 ),
               ),
             ],
