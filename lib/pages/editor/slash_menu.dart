@@ -175,12 +175,14 @@ class SlashMenuItemData {
     required this.icon,
     required this.title,
     required this.subtitle,
+    this.isLabel = false,
   });
 
   final SlashMenuAction action;
   final IconData icon;
   final String title;
   final String subtitle;
+  final bool isLabel; // non-selectable header row
 }
 
 const List<SlashMenuItemData> defaultSlashMenuItems = [
@@ -232,6 +234,32 @@ const List<SlashMenuItemData> defaultSlashMenuItems = [
     title: 'Divider',
     subtitle: 'Visual separator',
   ),
+  // Label for custom section
+  SlashMenuItemData(
+    action: SlashMenuAction.paragraph,
+    icon: Icons.more_horiz,
+    title: 'Custom / Special',
+    subtitle: '—',
+    isLabel: true,
+  ),
+  SlashMenuItemData(
+    action: SlashMenuAction.codeBlock,
+    icon: Icons.code,
+    title: 'Code block',
+    subtitle: 'Monospace formatted block',
+  ),
+  SlashMenuItemData(
+    action: SlashMenuAction.image,
+    icon: Icons.image_outlined,
+    title: 'Image',
+    subtitle: 'Insert image by URL',
+  ),
+  SlashMenuItemData(
+    action: SlashMenuAction.video,
+    icon: Icons.ondemand_video,
+    title: 'Video',
+    subtitle: 'Insert video by URL',
+  ),
 ];
 
 class _SlashMenuItem extends StatelessWidget {
@@ -251,6 +279,22 @@ class _SlashMenuItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final displayText = '${data.title}  •  ${data.subtitle}';
+
+    if (data.isLabel) {
+      return Container(
+        height: height,
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: Text(
+          data.title,
+          style: theme.textTheme.labelMedium?.copyWith(
+            color: theme.colorScheme.outline,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.4,
+          ),
+        ),
+      );
+    }
 
     return InkWell(
       borderRadius: BorderRadius.circular(8),
