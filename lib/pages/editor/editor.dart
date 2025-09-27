@@ -120,7 +120,7 @@ class _EditorScreenState extends State<EditorScreen> {
     final bytes = _exportDeltaBytes();
 
     final prefs = await SharedPreferences.getInstance();
-    final dir =  prefs.getString('path_to_files') ?? "";
+    final dir = prefs.getString('path_to_files') ?? "";
     final jsonString = utf8.decode(bytes);
     final file = File('$dir/File.json');
 
@@ -132,7 +132,7 @@ class _EditorScreenState extends State<EditorScreen> {
         SnackBar(content: Text('Saved file to ${file.path}')),
       );
     }
-  } 
+  }
 
   @override
   void dispose() {
@@ -424,7 +424,6 @@ class _EditorScreenState extends State<EditorScreen> {
                                 return null;
                               },
                             ),
-
                           ),
                         ],
                         textInputAction: TextInputAction.newline,
