@@ -192,13 +192,35 @@ class _EditorScreenState extends State<EditorScreen> {
     return parts.isEmpty ? path : parts.last;
   }
 
-  // ---------------- Slash menu helpers ----------------
-
-  List<SlashMenuItemData> get _allSlashItemsMerged {
-    final defaults = DefaultSlashMeuItems().defaultSlashMenuItems;
-    final customs = CustomSlashMenuItems().items;
-    return [...defaults, const SlashMenuItemData.separator(), ...customs];
+  Future<String?> _promptForUrl(BuildContext context, {required String label}) async {
+    final controller = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Enter $label'),
+        content: TextField(
+          controller: controller,
+          decoration: InputDecoration(
+            hintText: 'Enter $label',
+            border: const OutlineInputBorder(),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
+
+  // ---------------- Slash menu helpers ----------------
 
   List<SlashMenuItemData> get _filteredSlashItems {
     final q = _slashQuery.trim().toLowerCase();
@@ -449,9 +471,6 @@ class _EditorScreenState extends State<EditorScreen> {
           );
         });
         break;
-    if (!selection.isValid) {
-      _closeSlashMenu();
-      return;
     }
 
     // Execute the action if it exists in the map, passing the controller
@@ -649,7 +668,6 @@ class _EditorApiInjector extends InheritedWidget {
   const _EditorApiInjector({
     required this.onCreateApi,
     required super.child,
-    super.key,
   });
 
   static _EditorApiInjector? of(BuildContext context) =>

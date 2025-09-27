@@ -5,7 +5,7 @@ import 'slash_menu_action.dart';
 import 'package:secondstudent/globals/database.dart';
 
 class CustomSlashMenuItems {
-  List<SlashMenuItemData> get items => const [
+  final List<SlashMenuItemData> _items = [
     // SlashMenuItemData(
     //   action: SlashMenuAction.addEditNote,
     //   icon: Icons.sticky_note_2_outlined,
