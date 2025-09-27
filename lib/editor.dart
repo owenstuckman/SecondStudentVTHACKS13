@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:super_editor/super_editor.dart' as se;
@@ -23,6 +25,7 @@ class _EditorScreenState extends State<EditorScreen> {
 
   final ValueNotifier<_SlashMenuState> _slashMenuState = ValueNotifier(_SlashMenuHidden());
   final ValueNotifier<int> _slashMenuSelectionIndex = ValueNotifier(0);
+  Offset _slashMenuAnchor = Offset.zero;
 
   se.DocumentKeyboardAction get _slashCommandKeyboardAction => ({
         required se.SuperEditorContext editContext,
@@ -73,14 +76,14 @@ class _EditorScreenState extends State<EditorScreen> {
             return se.ExecutionInstruction.continueExecution;
           }
 
-          final caretRect =
-              editContext.documentLayout.getRectForPosition(editContext.composer.selection!.extent);
+          final caretRect = editContext.documentLayout
+              .getRectForPosition(editContext.composer.selection!.extent);
           if (caretRect == null) {
             return se.ExecutionInstruction.continueExecution;
           }
 
-          final anchor = Offset(caretRect.left, caretRect.bottom + 8);
-          _showSlashMenu(anchor, editContext.composer.selection!.extent);
+          _slashMenuAnchor = Offset(caretRect.left, caretRect.bottom);
+          _showSlashMenu(editContext.composer.selection!.extent);
           return se.ExecutionInstruction.haltExecution;
         }
 
@@ -132,10 +135,9 @@ class _EditorScreenState extends State<EditorScreen> {
     }
   }
 
-  void _showSlashMenu(Offset anchor, se.DocumentPosition triggerPosition) {
+  void _showSlashMenu(se.DocumentPosition triggerPosition) {
     _slashMenuSelectionIndex.value = 0;
     _slashMenuState.value = _SlashMenuVisible(
-      anchor,
       triggerPosition,
     );
   }
@@ -155,7 +157,7 @@ class _EditorScreenState extends State<EditorScreen> {
         se.SelectionChangeType.placeCaret,
         se.SelectionReason.userInteraction,
       ),
-      const se.InsertCharacterAtCaretRequest(character: '/'),
+      se.InsertCharacterAtCaretRequest(character: '/'),
     ]);
   }
 
@@ -302,14 +304,31 @@ class _EditorScreenState extends State<EditorScreen> {
                 if (state is! _SlashMenuVisible) {
                   return const SizedBox.shrink();
                 }
+
+                final renderBox = context.findRenderObject() as RenderBox?;
+                final overlaySize = renderBox?.size ?? Size.zero;
+                final menuHeight = slashMenuTotalHeight(defaultSlashMenuItems.length);
+                const menuWidth = defaultSlashMenuMaxWidth;
+
+                double dx = _slashMenuAnchor.dx - menuWidth / 2;
+                dx = dx.clamp(16.0, math.max(16.0, overlaySize.width - menuWidth - 16));
+
+                double dy = _slashMenuAnchor.dy + 10;
+                final double bottomLimit = overlaySize.height - menuHeight - 16;
+                if (overlaySize.height > 0 && dy > bottomLimit) {
+                  dy = _slashMenuAnchor.dy - menuHeight - 10;
+                }
+                dy = dy.clamp(16.0, math.max(16.0, bottomLimit));
+
                 return Positioned(
-                  left: state.anchor.dx,
-                  top: state.anchor.dy,
+                  left: dx,
+                  top: dy,
                   child: SlashMenu(
                     items: defaultSlashMenuItems,
                     selectionIndexListenable: _slashMenuSelectionIndex,
                     onSelect: _finalizeSlashSelection,
                     onDismiss: () => _hideSlashMenu(insertSlashOnDismiss: true),
+                    maxWidth: menuWidth,
                   ),
                 );
               },
@@ -330,8 +349,7 @@ class _SlashMenuHidden extends _SlashMenuState {
 }
 
 class _SlashMenuVisible extends _SlashMenuState {
-  const _SlashMenuVisible(this.anchor, this.triggerPosition);
+  const _SlashMenuVisible(this.triggerPosition);
 
-  final Offset anchor;
   final se.DocumentPosition triggerPosition;
 }
