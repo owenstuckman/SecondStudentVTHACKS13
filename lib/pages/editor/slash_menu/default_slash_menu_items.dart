@@ -1,64 +1,74 @@
-import 'slash_menu/slash_menu_action.dart';
-import 'slash_menu/slash_menu.dart';
 import 'package:flutter/material.dart';
+import 'slash_menu.dart';
+import 'slash_menu_action.dart';
 
 class DefaultSlashMeuItems {
-  List<SlashMenuItemData> defaultSlashMenuItems = [
+  List<SlashMenuItemData> get defaultSlashMenuItems => const [
     SlashMenuItemData(
       action: SlashMenuAction.paragraph,
       icon: Icons.text_fields,
       title: 'Paragraph',
-      subtitle: 'Plain text block',
+      subtitle: 'Normal text',
     ),
     SlashMenuItemData(
       action: SlashMenuAction.heading1,
-      icon: Icons.looks_one,
+      icon: Icons.title,
       title: 'Heading 1',
-      subtitle: 'Large section title',
+      subtitle: 'Large title',
     ),
     SlashMenuItemData(
       action: SlashMenuAction.heading2,
-      icon: Icons.looks_two,
+      icon: Icons.title,
       title: 'Heading 2',
-      subtitle: 'Medium section title',
+      subtitle: 'Section title',
     ),
     SlashMenuItemData(
       action: SlashMenuAction.heading3,
-      icon: Icons.looks_3,
+      icon: Icons.title,
       title: 'Heading 3',
-      subtitle: 'Small section title',
+      subtitle: 'Subsection',
+    ),
+    SlashMenuItemData(
+      action: SlashMenuAction.codeBlock,
+      icon: Icons.code,
+      title: 'Code block',
+      subtitle: 'Monospace section',
     ),
     SlashMenuItemData(
       action: SlashMenuAction.bulletList,
       icon: Icons.format_list_bulleted,
       title: 'Bulleted list',
-      subtitle: 'Organize ideas with bullets',
+      subtitle: '• Itemized list',
     ),
     SlashMenuItemData(
       action: SlashMenuAction.numberedList,
       icon: Icons.format_list_numbered,
       title: 'Numbered list',
-      subtitle: 'Steps and ordered lists',
+      subtitle: '1. 2. 3.',
     ),
     SlashMenuItemData(
       action: SlashMenuAction.toDoList,
-      icon: Icons.checklist_rtl,
+      icon: Icons.check_box_outlined,
       title: 'To-do list',
-      subtitle: 'Track tasks with checkboxes',
+      subtitle: 'Checkbox items',
     ),
     SlashMenuItemData(
       action: SlashMenuAction.divider,
       icon: Icons.horizontal_rule,
       title: 'Divider',
-      subtitle: 'Visual separator',
+      subtitle: 'Horizontal rule',
     ),
     SlashMenuItemData(
-      action: SlashMenuAction.addEditNote,
-      icon: Icons.edit_note,
-      title: 'Edit Note',
-      subtitle: 'Visual separator',
+      action: SlashMenuAction.image,
+      icon: Icons.image_outlined,
+      title: 'Image',
+      subtitle: 'Paste an image URL',
+    ),
+    SlashMenuItemData(
+      action: SlashMenuAction.video,
+      icon: Icons.ondemand_video_outlined,
+      title: 'Video',
+      subtitle: 'YouTube/Vimeo URL',
     ),
   ];
-
-
 }

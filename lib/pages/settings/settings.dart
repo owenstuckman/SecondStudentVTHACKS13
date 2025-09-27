@@ -11,6 +11,7 @@ import '../../globals/static/custom_widgets/icon_circle.dart';
 import '../../globals/static/custom_widgets/text_bubble.dart';
 import 'package:secondstudent/pages/startup/welcome_page.dart';
 import 'package:secondstudent/globals/database.dart';
+import 'package:secondstudent/globals/static/custom_widgets/dialogWidget.dart';
 
 class Settings extends StatelessWidget {
   static TextEditingController emailController = TextEditingController(
@@ -20,7 +21,16 @@ class Settings extends StatelessWidget {
     text: AccountService.account['name'] ?? '',
   );
 
+  @override
   static bool tutorials = localStorage.getItem("tutorials") != "false";
+
+  final TextEditingController _canvasTokenController = TextEditingController();
+  final TextEditingController _canvasDomainController = TextEditingController();
+
+  void _reloadCanvasControllersFromStorage() {
+    _canvasTokenController.text = localStorage.getItem('canvasToken') ?? '';
+    _canvasDomainController.text = localStorage.getItem('canvasDomain') ?? '';
+  }
 
   Widget _buildOption(
     BuildContext context,
@@ -51,6 +61,14 @@ class Settings extends StatelessWidget {
         color: colorScheme.onSurface.withAlpha(192),
       ),
       onTap: onTap,
+    );
+  }
+
+  Widget canvasWaterMark(BuildContext context) {
+    return Container(
+      width: 100,
+      height: 100,
+      color: Colors.black,
     );
   }
 
@@ -323,6 +341,34 @@ class Settings extends StatelessWidget {
                     }
                   },
                 ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Divider(color: colorScheme.onSurface.withAlpha(128)),
+                ),
+                _buildOption(
+                  context,
+                  "Canvas",
+                  Icons.school_outlined,
+                  Colors.blue,
+                  () async {
+                    _reloadCanvasControllersFromStorage();
+
+                    final ok = await showDialog<bool>(
+                      context: context,
+                      builder: (context) => _buildCanvasSettings(
+                        context,
+                        domain: _canvasDomainController.text,
+                        token: _canvasTokenController.text,
+                      ),
+                    );
+                    if (ok == true) {
+                      localStorage.setItem(
+                          'canvasToken', _canvasTokenController.text);
+                      localStorage.setItem(
+                          'canvasDomain', _canvasDomainController.text);
+                    }
+                  },
+                ),
               ],
             ),
           ),
@@ -376,6 +422,61 @@ class Settings extends StatelessWidget {
             },
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildCanvasSettings(BuildContext context,
+      {required String token, required String domain}) {
+    final ColorScheme colorScheme = Theme.of(context).colorScheme;
+
+    return Dialog(
+      child: Container(
+        height: MediaQuery.of(context).size.height * 0.3,
+        width: MediaQuery.of(context).size.width * 0.3,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              children: [
+                SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Canvas Settings',
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 10),
+                TextField(
+                  controller: _canvasDomainController,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    labelText: 'Canvas Domain',
+                  ),
+                ),
+                SizedBox(height: 10),
+                TextField(
+                  controller: _canvasTokenController,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    labelText: 'Canvas Token',
+                  ),
+                ),
+                SizedBox(height: 10),
+                StyledButton(
+                  text: 'Save',
+                  onTap: () {
+                    Navigator.of(context).pop(true);
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

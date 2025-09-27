@@ -9,12 +9,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'package:flutter_quill_extensions/flutter_quill_extensions.dart';
+import 'package:secondstudent/pages/editor/customblocks.dart';
+import 'package:secondstudent/pages/editor/customBlocks/iframe_block.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-// If you use your slash menu and custom actions, keep these:
-import 'slash_menu.dart';
-import 'slash_menu_action.dart';
-import 'default_slash_menu_items.dart';
+import 'slash_menu/slash_menu.dart';
+import 'slash_menu/slash_menu_action.dart';
+import 'slash_menu/custom_slash_menu_items.dart';
+import 'slash_menu/default_slash_menu_items.dart';
+
 
 class EditorScreen extends StatefulWidget {
   const EditorScreen({super.key});
@@ -43,6 +46,113 @@ class _EditorScreenState extends State<EditorScreen> {
     },
     {"insert": "\n"},
   ];
+
+  /// Add note block helper
+  Future<void> _addEditNote(
+    BuildContext context, {
+    quill.Document? document,
+    int? existingOffset,
+  }) async {
+    final isEditing = document != null;
+    final dialogController = quill.QuillController(
+      document: document ?? quill.Document(),
+      selection: const TextSelection.collapsed(offset: 0),
+    );
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        titlePadding: const EdgeInsets.only(left: 16, top: 8),
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(isEditing ? 'Edit note' : 'Add note'),
+            IconButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              icon: const Icon(Icons.close),
+            ),
+          ],
+        ),
+        content: quill.QuillEditor.basic(
+          controller: dialogController,
+          config: const quill.QuillEditorConfig(),
+        ),
+      ),
+    );
+
+    if (dialogController.document.isEmpty()) return;
+
+    // Serialize inner doc and create the embed
+    final notesEmbed = NotesBlockEmbed.fromDocument(dialogController.document);
+
+    if (isEditing && existingOffset != null) {
+      // Replace the existing embed at its node offset
+      // In v10+ each embed occupies a single character length.
+      _controller.replaceText(
+        existingOffset,
+        1,
+        quill.BlockEmbed.custom(notesEmbed),
+        TextSelection.collapsed(offset: existingOffset + 1),
+      );
+      return;
+    }
+
+    // Insert a new embed at the current caret, plus a newline
+    final insertAt = _controller.selection.isValid
+        ? _controller.selection.start
+        : _controller.document.length;
+    _controller.replaceText(
+      insertAt,
+      0,
+      quill.BlockEmbed.custom(notesEmbed),
+      TextSelection.collapsed(offset: insertAt + 1),
+    );
+    // Add a newline after the block so the caret ends below it
+    _controller.replaceText(
+      insertAt + 1,
+      0,
+      '\n',
+      TextSelection.collapsed(offset: insertAt + 2),
+    );
+  }
+
+  //excalidraw and google doc helpers
+  String _normalizeExcalidraw(String url) {
+    // Accepts app.excalidraw.com links. If user pasted plain excalidraw.com, fix host.
+    final u = Uri.tryParse(url);
+    if (u == null) return url;
+    if (u.host == 'excalidraw.com') {
+      return u.replace(host: 'app.excalidraw.com').toString();
+    }
+    return url;
+  }
+
+  /// Returns a preview/published URL, or null if we can’t make it embeddable.
+  String? _normalizeGoogle(String url) {
+    final u = Uri.tryParse(url);
+    if (u == null) return null;
+
+    // Case 1: already a Drive file preview link → keep
+    if (u.host.endsWith('drive.google.com') && u.path.contains('/preview')) {
+      return url;
+    }
+
+    // Case 2: Drive file /view?usp=...  -> swap to /preview
+    if (u.host.endsWith('drive.google.com') && u.path.contains('/file/')) {
+      final newPath = u.path.replaceAll('/view', '/preview');
+      return u.replace(path: newPath, queryParameters: {}).toString();
+    }
+
+    // Case 3: Google Docs “publish to web” gives an embeddable /pub or /embed URL → keep
+    if (u.host.endsWith('docs.google.com') &&
+        (u.path.contains('/pub') || u.path.contains('/embed'))) {
+      return url;
+    }
+
+    // Regular Docs /document/d/<id>/edit is usually blocked by X-Frame-Options.
+    // Ask the user to use File → Share → Publish to web, then paste that link.
+    return null;
+  }
 
   late quill.QuillController _controller;
   StreamSubscription? _docSub;
@@ -189,22 +299,42 @@ class _EditorScreenState extends State<EditorScreen> {
     return parts.isEmpty ? path : parts.last;
   }
 
-  // ---------------- Slash menu helpers (optional) ----------------
+  // --- Slash menu helpers ---
+  List<SlashMenuItemData> get _allSlashItemsMerged {
+  final defaults = DefaultSlashMeuItems().defaultSlashMenuItems;
+  final customs  = CustomSlashMenuItems().items;
+  return [...defaults, const SlashMenuItemData.separator(), ...customs];
+}
 
-  List<SlashMenuItemData> get _allSlashItems =>
-      DefaultSlashMeuItems().defaultSlashMenuItems;
+List<SlashMenuItemData> get _filteredSlashItems {
+  final q = _slashQuery.trim().toLowerCase();
+  final defaults = DefaultSlashMeuItems().defaultSlashMenuItems;
+  final customs  = CustomSlashMenuItems().items;
 
-  List<SlashMenuItemData> get _filteredSlashItems {
-    final q = _slashQuery.trim().toLowerCase();
-    if (q.isEmpty) return _allSlashItems;
-    return _allSlashItems
-        .where(
-          (it) =>
-              it.title.toLowerCase().contains(q) ||
-              it.subtitle.toLowerCase().contains(q),
-        )
-        .toList(growable: false);
+  bool match(SlashMenuItemData it) {
+    if (it.isLabel || it.isSeparator) return false;
+    if (q.isEmpty) return true;
+    return it.title.toLowerCase().contains(q) ||
+           it.subtitle.toLowerCase().contains(q);
   }
+
+  final d = defaults.where(match).toList();
+  final c = customs.where(match).toList();
+
+  if (q.isEmpty) {
+    // Show both sections with a divider
+    if (d.isEmpty) return c;
+    if (c.isEmpty) return d;
+    return [...d, const SlashMenuItemData.separator(), ...c];
+  } else {
+    // Only show divider if both sections have matches
+    if (d.isEmpty && c.isEmpty) return [];
+    if (d.isEmpty) return c;
+    if (c.isEmpty) return d;
+    return [...d, const SlashMenuItemData.separator(), ...c];
+  }
+}
+
 
   void _openSlashMenu(String query) {
     if (!_isSlashMenuOpen) {
@@ -326,8 +456,7 @@ class _EditorScreenState extends State<EditorScreen> {
         _controller.formatSelection(quill.Attribute.codeBlock);
         break;
       case SlashMenuAction.addEditNote:
-        // Hook your addEditNote(context) here if you use it.
-        // addEditNote(context);
+        _addEditNote(context);
         break;
       case SlashMenuAction.image:
         _promptForUrl(context, label: 'Image URL').then((url) {
@@ -350,6 +479,67 @@ class _EditorScreenState extends State<EditorScreen> {
             0,
             quill.BlockEmbed.video(url),
             const TextSelection.collapsed(offset: 0),
+          );
+        });
+        break;
+      case SlashMenuAction.iframeExcalidraw:
+        _promptForUrl(context, label: 'Excalidraw room/share URL').then((url) {
+          if (url == null || url.isEmpty) return;
+          final insertAt = _controller.selection.isValid
+              ? _controller.selection.start
+              : _controller.document.length;
+          final block = quill.BlockEmbed.custom(
+            IframeBlockEmbed(url: _normalizeExcalidraw(url)),
+          );
+          _controller.replaceText(
+            insertAt,
+            0,
+            block,
+            TextSelection.collapsed(offset: insertAt + 1),
+          );
+          _controller.replaceText(
+            insertAt + 1,
+            0,
+            '\n',
+            TextSelection.collapsed(offset: insertAt + 2),
+          );
+        });
+        break;
+
+      case SlashMenuAction.iframeGoogleDoc:
+        _promptForUrl(
+          context,
+          label: 'Google Doc (published) or Drive preview URL',
+        ).then((url) {
+          if (url == null || url.isEmpty) return;
+          final normalized = _normalizeGoogle(url);
+          if (normalized == null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Use a published link (File → Share → Publish to web) or Drive “/preview” link.',
+                ),
+              ),
+            );
+            return;
+          }
+          final insertAt = _controller.selection.isValid
+              ? _controller.selection.start
+              : _controller.document.length;
+          final block = quill.BlockEmbed.custom(
+            IframeBlockEmbed(url: normalized, height: 560),
+          );
+          _controller.replaceText(
+            insertAt,
+            0,
+            block,
+            TextSelection.collapsed(offset: insertAt + 1),
+          );
+          _controller.replaceText(
+            insertAt + 1,
+            0,
+            '\n',
+            TextSelection.collapsed(offset: insertAt + 2),
           );
         });
         break;
@@ -470,6 +660,15 @@ class _EditorScreenState extends State<EditorScreen> {
                         autoFocus: true,
                         placeholder: 'Type / to open the command menu.',
                         embedBuilders: [
+                          IframeEmbedBuilder(),
+                          NotesEmbedBuilder(
+                            onTapEdit: (ctx, {document, existingOffset}) =>
+                                _addEditNote(
+                                  ctx,
+                                  document: document,
+                                  existingOffset: existingOffset,
+                                ),
+                          ),
                           ...FlutterQuillEmbeds.editorBuilders(
                             imageEmbedConfig: QuillEditorImageEmbedConfig(
                               imageProviderBuilder: (context, imageUrl) {

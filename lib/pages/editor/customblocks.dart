@@ -1,112 +1,108 @@
-import 'package:flutter_quill/flutter_quill.dart';
 import 'dart:convert';
-import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_quill/flutter_quill.dart';
 
+/// ==== Custom "notes" block embed ===========================================
 class NotesBlockEmbed extends CustomBlockEmbed {
   const NotesBlockEmbed(String value) : super(noteType, value);
 
   static const String noteType = 'notes';
 
   static NotesBlockEmbed fromDocument(Document document) {
-    try {
-      if (document.toDelta().isEmpty) {
-        throw Exception('Document is empty');
-      }
-      return NotesBlockEmbed(jsonEncode(document.toDelta().toJson()));
-    } catch (e) {
-      print('Error creating NotesBlockEmbed from Document: $e');
-      return const NotesBlockEmbed(''); // Return a default or empty embed
-    }
+    // Store the inner document as a JSON string (delta ops).
+    final ops = document.toDelta().toJson();
+    return NotesBlockEmbed(jsonEncode(ops));
   }
 
   Document get document {
     try {
-      return Document.fromJson(jsonDecode(data));
-    } catch (e) {
-      print('Error decoding NotesBlockEmbed data: $e');
-      return Document(); // Return an empty document on error
-    }
+      final ops = jsonDecode(data);
+      if (ops is List) {
+        return Document.fromJson(ops.cast<Map<String, dynamic>>());
+      }
+    } catch (_) {}
+    return Document();
   }
 }
 
-class NotesEmbedBuilder extends EmbedBuilder {
-  NotesEmbedBuilder({required this.addEditNote});
-
-  Future<void> Function(BuildContext context, {Document? document}) addEditNote;
+/// ==== Builder to render the "notes" embed ==================================
+class NotesEmbedBuilder implements EmbedBuilder {
+  NotesEmbedBuilder({required this.onTapEdit});
+  final Future<void> Function(BuildContext context, {Document? document, int? existingOffset}) onTapEdit;
 
   @override
-  String get key => 'notes';
+  String get key => NotesBlockEmbed.noteType;
+
+  // Satisfy older/newer EmbedBuilder contracts explicitly
+  @override
+  bool get expanded => true;
+
+  @override
+  WidgetSpan buildWidgetSpan(Widget widget) => WidgetSpan(child: widget);
+
+  @override
+  String toPlainText(dynamic node) => '\uFFFC';
 
   @override
   Widget build(BuildContext context, EmbedContext embedContext) {
     try {
-      final notes = NotesBlockEmbed(embedContext.node.value.data).document;
+      final doc = NotesBlockEmbed(embedContext.node.value.data).document;
+      final preview = doc.toPlainText().replaceAll('\n', ' ');
+      // Use the offset of this node to support "Edit"
+      final nodeOffset = embedContext.node.documentOffset;
 
       return Material(
         color: Colors.transparent,
         child: ListTile(
+          leading: const Icon(Icons.notes),
           title: Text(
-            notes.toPlainText().replaceAll('\n', ' '),
+            preview.isEmpty ? 'Note' : preview,
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
           ),
-          leading: const Icon(Icons.notes),
-          onTap: () => addEditNote(context, document: notes),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
             side: const BorderSide(color: Colors.grey),
           ),
+          onTap: () => onTapEdit(context, document: doc, existingOffset: nodeOffset),
         ),
       );
     } catch (e) {
-      print('Error rendering NotesEmbedBuilder: $e');
-      return Container(); // Return an empty container or an error widget
+      // Fallback if the payload is malformed
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: const Text('Invalid note block'),
+      );
     }
   }
 }
 
-Future<void> addEditNote(BuildContext context, {Document? document}) async {
-  final isEditing = document != null;
-  final controller = QuillController(
-    document: document ?? Document(),
-    selection: const TextSelection.collapsed(offset: 0),
-  );
+/// ==== Custom "iframe" block embed ==========================================
+class IframeBlockEmbed extends CustomBlockEmbed {
+  static const String kType = 'iframe';
 
-  await showDialog(
-    context: context,
-    builder: (context) => AlertDialog(
-      titlePadding: const EdgeInsets.only(left: 16, top: 8),
-      title: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text('${isEditing ? 'Edit' : 'Add'} note'),
-          IconButton(
-            onPressed: () => Navigator.of(context).pop(),
-            icon: const Icon(Icons.close),
-          )
-        ],
-      ),
-      content: QuillEditor.basic(
-        controller: controller,
-        config: const QuillEditorConfig(),
-      ),
-    ),
-  );
+  IframeBlockEmbed._(String value) : super(kType, value);
 
-  if (controller.document.isEmpty()) return;
+  factory IframeBlockEmbed({required String url, double? height}) {
+    final payload = <String, dynamic>{'url': url};
+    if (height != null) payload['height'] = height;
+    return IframeBlockEmbed._(jsonEncode(payload));
+  }
 
-  final block = BlockEmbed.custom(
-    NotesBlockEmbed.fromDocument(controller.document),
-  );
-  final index = controller.selection.baseOffset;
-  final length = controller.selection.extentOffset - index;
+  factory IframeBlockEmbed.fromRaw(String value) => IframeBlockEmbed._(value);
 
-  if (isEditing) {
-    final offset = getEmbedNode(controller, controller.selection.start).offset;
-    controller.replaceText(
-        offset, 1, block, TextSelection.collapsed(offset: offset));
-  } else {
-    controller.replaceText(index, length, block, null);
+  Map<String, dynamic> get dataMap {
+    try {
+      final decoded = jsonDecode(data);
+      if (decoded is Map<String, dynamic>) return decoded;
+      if (decoded is Map) {
+        return decoded.map((k, v) => MapEntry(k.toString(), v));
+      }
+    } catch (_) {}
+    return const <String, dynamic>{};
   }
 }

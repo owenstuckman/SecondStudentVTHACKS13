@@ -11,4 +11,6 @@ enum SlashMenuAction {
   image,
   video,
   addEditNote,
+  iframeExcalidraw,
+  iframeGoogleDoc,
 }

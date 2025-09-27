@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:calendar_view/calendar_view.dart';
+import 'package:localstorage/localstorage.dart';
+import 'package:secondstudent/globals/static/custom_widgets/styled_button.dart';
+import 'package:secondstudent/globals/static/types/assignment.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class CalendarWidget extends StatefulWidget {
   final String description;
@@ -18,6 +23,10 @@ final GlobalKey<DayViewState> dayViewKey = GlobalKey<DayViewState>();
 class _CalendarWidgetState extends State<CalendarWidget> {
   late EventController _eventController;
   int _eventId = 1;
+
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _descriptionController = TextEditingController();
+  DateTime? _selectedDate;
 
   @override
   void initState() {
@@ -44,8 +53,30 @@ class _CalendarWidgetState extends State<CalendarWidget> {
 
   @override
   void dispose() {
+    _nameController.dispose();
+    _descriptionController.dispose();
     _eventController.dispose();
     super.dispose();
+  }
+
+  Future<List<dynamic>> fetchData() async {
+    final url = Uri.parse(
+        '${localStorage.getItem('canvasDomain')}/api/v1/courses?include[]=&state[]=available');
+
+    final headers = {
+      'Authorization': 'Bearer ${localStorage.getItem('canvasToken')}',
+    };
+
+    try {
+      final response = await http.get(url, headers: headers);
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      return [];
+    } catch (e) {
+      return [];
+    }
   }
 
   Widget _headerBuilder(DateTime date) {
@@ -77,15 +108,96 @@ class _CalendarWidgetState extends State<CalendarWidget> {
     );
   }
 
-  void _addEventForToday() {
-    final now = DateTime.now();
+  void _addEvent({
+    required String title,
+    required String description,
+    required DateTime date,
+  }) {
     final newEvent = CalendarEventData(
-      title: 'New Event ${_eventId++}',
-      date: DateTime(now.year, now.month, now.day),
-      event: 'New Event',
+      title: title.isEmpty ? 'New Event ${_eventId++}' : title,
+      date: DateTime(date.year, date.month, date.day),
+      event: description,
     );
     _eventController.add(newEvent);
     setState(() {});
+    Navigator.of(context).pop();
+  }
+
+  Widget _dialogBuilder(DateTime date) {
+    final DateTime displayDate = _selectedDate ?? date;
+
+    return Dialog(
+      child: Container(
+        height: MediaQuery.of(context).size.height * 0.3,
+        width: MediaQuery.of(context).size.width * 0.3,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              children: [
+                SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${displayDate.year}-${displayDate.month.toString().padLeft(2, '0')}-${displayDate.day.toString().padLeft(2, '0')}',
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.calendar_today),
+                      onPressed: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: displayDate,
+                          firstDate: DateTime(2000),
+                          lastDate: DateTime(2100),
+                        );
+                        if (picked != null) {
+                          setState(() {
+                            _selectedDate = picked;
+                          });
+                        }
+                      },
+                    ),
+                  ],
+                ),
+                SizedBox(height: 10),
+                TextField(
+                  controller: _nameController,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    labelText: 'Event Name',
+                  ),
+                ),
+                SizedBox(height: 10),
+                TextField(
+                  controller: _descriptionController,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    labelText: 'Event Description',
+                  ),
+                ),
+                SizedBox(height: 10),
+                StyledButton(
+                  text: 'Add Event',
+                  onTap: () {
+                    _addEvent(
+                      title: _nameController.text.trim(),
+                      description: _descriptionController.text.trim(),
+                      date: _selectedDate ?? date,
+                    );
+                    _nameController.clear();
+                    _descriptionController.clear();
+                    _selectedDate = null;
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -125,8 +237,8 @@ class _CalendarWidgetState extends State<CalendarWidget> {
           MonthView(
             key: monthViewKey,
             // Users can swipe/drag horizontally to change months (built-in behavior)
-            minMonth: DateTime(now.year, now.month - 1),
-            maxMonth: DateTime(now.year, now.month + 1),
+            minMonth: DateTime(now.year, now.month - 2),
+            maxMonth: DateTime(now.year, now.month + 3),
             initialMonth: DateTime(now.year, now.month),
             startDay: WeekDays.monday,
             headerBuilder: _headerBuilder,
@@ -199,7 +311,8 @@ class _CalendarWidgetState extends State<CalendarWidget> {
             child: FloatingActionButton(
               mini: true,
               backgroundColor: colorScheme.primary,
-              onPressed: _addEventForToday,
+              onPressed: () => showDialog(
+                  context: context, builder: (context) => _dialogBuilder(now)),
               child: Icon(Icons.add, color: colorScheme.onPrimary),
             ),
           ),
