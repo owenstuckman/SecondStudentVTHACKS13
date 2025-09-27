@@ -8,6 +8,8 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:secondstudent/globals/static/extensions/local-storage-wrap.dart';
 import 'package:secondstudent/globals/static/extensions/canvasFullQuery.dart';
+import 'package:flutter_widget_from_html/flutter_widget_from_html.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class CalendarWidget extends StatefulWidget {
   final String description;
@@ -40,42 +42,30 @@ class _CalendarWidgetState extends State<CalendarWidget> {
   void initState() {
     super.initState();
     _eventController = EventController();
-    // Load locally created and previously fetched Canvas events
     final assignments = localStorage.getItem('assignments');
     if (assignments != null && assignments.isNotEmpty) {
-      try {
-        final assignmentsList = jsonDecode(assignments);
-        if (assignmentsList is List) {
-          for (final item in assignmentsList) {
-            if (item is Map && item['due_at'] != null) {
-              try {
-                final DateTime localDate = DateTime.parse(
-                  item['due_at'].toString(),
-                ).toLocal();
-                _eventController.add(
-                  CalendarEventData(
-                    title: (item['title'] ?? 'Local Event').toString(),
-                    date: localDate,
-                    event: {
-                      'id': item['id'],
-                      'title': item['title'],
-                      'description': item['description'] ?? '',
-                      'due_at': item['due_at'],
-                      'source': 'local',
-                    },
-                  ),
-                );
-              } catch (_) {
-                // Ignore malformed local entries
-              }
-            }
-          }
-        }
-      } catch (_) {
-        // Ignore malformed local storage
+      final List<dynamic> assignmentsList =
+          jsonDecode(assignments) as List<dynamic>;
+      final List<CalendarEventData> initialEvents = assignmentsList
+          .whereType<Map>()
+          .map((e) {
+            final String title = (e['title'] ?? 'Event').toString();
+            final String? dueAt = e['due_at']?.toString();
+            final DateTime date = dueAt != null
+                ? DateTime.parse(dueAt).toLocal()
+                : DateTime.now();
+            return CalendarEventData(
+              title: title,
+              date: date,
+              description: (e['description'] ?? '').toString(),
+              event: e,
+            );
+          })
+          .toList();
+      if (initialEvents.isNotEmpty) {
+        _eventController.addAll(initialEvents);
       }
     }
-    // Fetch Canvas assignments (do not persist)
     fetchData();
   }
 
@@ -97,66 +87,90 @@ class _CalendarWidgetState extends State<CalendarWidget> {
     final headers = {'Authorization': 'Bearer $token'};
 
     try {
+      final stored = localStorage.getItem('assignments');
+      final Set<String> existingIds = {};
+      if (stored != null && stored.isNotEmpty) {
+        final List<dynamic> storedList = jsonDecode(stored) as List<dynamic>;
+        for (final item in storedList) {
+          if (item is Map && item['id'] != null) {
+            existingIds.add(item['id'].toString());
+          }
+        }
+      }
+
+      final List<CalendarEventData> newEvents = [];
+      final List<Map<String, dynamic>> newMetas = [];
+
       final Uri coursesUrl = Uri.parse(
         '$domain/api/v1/courses?enrollment_type=student&enrollment_state=active',
       );
+
       final List<dynamic> courses = await CanvasFullQuery.fetchAllPages(
         coursesUrl,
         headers,
       );
 
-      for (final course in courses) {
-        if (course is! Map) continue;
-        final dynamic idVal = course['id'];
-        final int courseId = idVal is int
-            ? idVal
-            : int.tryParse(idVal?.toString() ?? '') ?? 0;
-        if (courseId == 0) continue;
+      await Future.wait(
+        courses.map((course) async {
+          if (course is! Map) return;
+          final dynamic idVal = course['id'];
+          final int courseId = idVal is int
+              ? idVal
+              : int.tryParse(idVal?.toString() ?? '') ?? 0;
+          if (courseId == 0) return;
 
-        final Uri assignmentsUrl = Uri.parse(
-          '$domain/api/v1/courses/$courseId/assignments?per_page=100',
-        );
-        final List<dynamic> assignments = await CanvasFullQuery.fetchAllPages(
-          assignmentsUrl,
-          headers,
-        );
-
-        for (final a in assignments) {
-          if (a is! Map) continue;
-          final dueAt = a['due_at'];
-          if (dueAt == null) continue; // ignore assignments without due date
-
-          DateTime? localDate;
-          try {
-            localDate = DateTime.parse(dueAt.toString()).toLocal();
-          } catch (_) {
-            localDate = null;
-          }
-          if (localDate == null) continue;
-
-          final String title = (a['name'] ?? 'Assignment').toString();
-          final String description = (a['description'] ?? '').toString();
-
-          _eventController.add(
-            CalendarEventData(
-              title: title.isEmpty ? 'Assignment' : title,
-              date: localDate,
-              event: {
-                'id': a['id'],
-                'title': title,
-                'description': description,
-                'due_at': a['due_at'],
-                'html_url': a['html_url'],
-                'course_id': a['course_id'],
-                'source': 'canvas',
-              },
-            ),
+          final Uri assignmentsUrl = Uri.parse(
+            '$domain/api/v1/courses/$courseId/assignments?per_page=100',
           );
-        }
+          final List<dynamic> assignments = await CanvasFullQuery.fetchAllPages(
+            assignmentsUrl,
+            headers,
+          );
+
+          for (final assignment in assignments) {
+            if (assignment is! Map) continue;
+            final dueAt = assignment['due_at'];
+            if (dueAt == null) continue;
+
+            final String idStr = assignment['id'].toString();
+            if (existingIds.contains(idStr)) continue;
+
+            final String title = (assignment['name'] ?? 'Assignment')
+                .toString();
+            final String description = (assignment['description'] ?? '')
+                .toString();
+
+            final Map<String, dynamic> meta = {
+              'id': assignment['id'],
+              'title': title,
+              'description': description,
+              'due_at': dueAt,
+              'html_url': assignment['html_url'],
+              'course_id': assignment['course_id'],
+              'source': 'canvas',
+              'completed': assignment['has_submitted_submissions'] == true,
+            };
+
+            final event = CalendarEventData(
+              title: title.isEmpty ? 'Assignment' : title,
+              date: DateTime.parse(dueAt).toLocal(),
+              event: meta,
+              description: description,
+            );
+
+            newEvents.add(event);
+            newMetas.add(meta);
+            existingIds.add(idStr);
+          }
+        }),
+      );
+
+      if (newEvents.isNotEmpty) {
+        _eventController.addAll(newEvents);
+        localStorage.inclusiveSetItem('assignments', jsonEncode(newMetas));
       }
-      setState(() {});
-    } catch (_) {
-      // Swallow errors silently for now
+    } catch (e) {
+      print(e);
     }
   }
 
@@ -214,7 +228,6 @@ class _CalendarWidgetState extends State<CalendarWidget> {
     );
     _eventController.add(newEvent);
 
-    final raw = localStorage.getItem('assignments');
     final Map<String, dynamic> jsonEvent = {
       'id': generatedId,
       'title': newEvent.title,
@@ -222,39 +235,7 @@ class _CalendarWidgetState extends State<CalendarWidget> {
       'due_at': normalizedDate.toUtc().toIso8601String(),
       'source': 'local',
     };
-
-    try {
-      if (raw != null) {
-        final list = jsonDecode(raw);
-        if (list is List) {
-          list.add(jsonEvent);
-          localStorage.inclusiveSetItem(
-            'assignments',
-            jsonEncode(list),
-            context,
-          );
-        } else {
-          localStorage.inclusiveSetItem(
-            'assignments',
-            jsonEncode([jsonEvent]),
-            context,
-          );
-        }
-      } else {
-        localStorage.inclusiveSetItem(
-          'assignments',
-          jsonEncode([jsonEvent]),
-          context,
-        );
-      }
-    } catch (_) {
-      // If anything goes wrong, reset storage to just this event
-      localStorage.inclusiveSetItem(
-        'assignments',
-        jsonEncode([jsonEvent]),
-        context,
-      );
-    }
+    localStorage.inclusiveSetItem('assignments', jsonEncode([jsonEvent]));
 
     setState(() {});
     Navigator.of(context).pop();
@@ -349,6 +330,7 @@ class _CalendarWidgetState extends State<CalendarWidget> {
     final String? htmlUrl = (meta is Map && meta['html_url'] is String)
         ? meta['html_url'] as String
         : null;
+    final bool isCompleted = (meta is Map && meta['completed'] == true);
 
     showModalBottomSheet(
       context: context,
@@ -384,9 +366,12 @@ class _CalendarWidgetState extends State<CalendarWidget> {
                   Expanded(
                     child: Text(
                       event.title ?? 'Event',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w600,
+                        decoration: isCompleted
+                            ? TextDecoration.lineThrough
+                            : TextDecoration.none,
                       ),
                     ),
                   ),
@@ -399,7 +384,15 @@ class _CalendarWidgetState extends State<CalendarWidget> {
               ),
               if (description.isNotEmpty) ...[
                 SizedBox(height: 8),
-                Text(stripHtml(description)),
+                HtmlWidget(
+                  description,
+                  onTapUrl: (url) async {
+                    return await launchUrl(
+                      Uri.parse(url),
+                      mode: LaunchMode.externalApplication,
+                    );
+                  },
+                ),
               ],
               if (htmlUrl != null && htmlUrl.isNotEmpty) ...[
                 SizedBox(height: 8),
@@ -421,18 +414,27 @@ class _CalendarWidgetState extends State<CalendarWidget> {
     final String source = (meta is Map && meta['source'] is String)
         ? meta['source'] as String
         : 'canvas';
+    final bool isCompleted = meta is Map && meta['completed'] == true;
+
     final Color barColor = source == 'local'
         ? colorScheme.secondary
         : colorScheme.primary;
+
+    final Color chipBg = isCompleted
+        ? barColor.withOpacity(0.25)
+        : barColor.withOpacity(0.12);
+    final Color chipBorder = isCompleted
+        ? barColor.withOpacity(0.7)
+        : barColor.withOpacity(0.5);
 
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       margin: const EdgeInsets.only(bottom: 3),
       decoration: BoxDecoration(
-        color: barColor.withOpacity(0.12),
+        color: chipBg,
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: barColor.withOpacity(0.5), width: 0.5),
+        border: Border.all(color: chipBorder, width: 0.5),
       ),
       child: Row(
         children: [
@@ -444,7 +446,13 @@ class _CalendarWidgetState extends State<CalendarWidget> {
               maxLines: 1,
               softWrap: true,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 10, color: colorScheme.onSurface),
+              style: TextStyle(
+                fontSize: 10,
+                color: colorScheme.onSurface.withOpacity(isCompleted ? 0.6 : 1),
+                decoration: isCompleted
+                    ? TextDecoration.lineThrough
+                    : TextDecoration.none,
+              ),
             ),
           ),
         ],

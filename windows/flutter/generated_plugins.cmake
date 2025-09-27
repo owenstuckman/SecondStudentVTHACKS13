@@ -6,6 +6,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   app_links
   file_saver
   file_selector_windows
+  pdfx
   url_launcher_windows
 )
 
