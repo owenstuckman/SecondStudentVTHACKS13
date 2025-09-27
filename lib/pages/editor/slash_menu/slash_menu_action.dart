@@ -14,3 +14,5 @@ enum SlashMenuAction {
   iframeExcalidraw,
   iframeGoogleDoc,
 }
+
+// add logic to add in enum from the db 
