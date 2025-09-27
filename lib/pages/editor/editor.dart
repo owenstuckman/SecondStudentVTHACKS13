@@ -120,17 +120,39 @@ class _EditorScreenState extends State<EditorScreen> {
     final bytes = _exportDeltaBytes();
 
     final prefs = await SharedPreferences.getInstance();
-    final dir =  prefs.getString('path_to_files') ?? "";
+    final dir = prefs.getString('path_to_files') ?? "";
+    
+    // Check if the directory is valid
+    if (dir.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Invalid file path. Please set a valid path in settings.')),
+        );
+      }
+      return;
+    }
+
     final jsonString = utf8.decode(bytes);
+    // need to correct how its named
     final file = File('$dir/File.json');
 
-    // Write to file
-    await file.writeAsString(jsonString);
-
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Saved file to ${file.path}')),
-      );
+    try {
+      // Create a blank file before writing
+      await file.create(recursive: true);
+      
+      // Write to file
+      await file.writeAsString(jsonString);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Saved file to ${file.path}')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error saving file: $e')),
+        );
+      }
     }
   } 
 

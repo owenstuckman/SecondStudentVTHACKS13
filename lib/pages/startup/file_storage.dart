@@ -32,9 +32,15 @@ class FileStorage extends StatelessWidget {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return CircularProgressIndicator();
                 } else if (snapshot.hasData && snapshot.data != null) {
-                  return Text('Current File Location: ${snapshot.data}', style: TextStyle(fontSize: 18));
+                  return Text(
+                    'Current File Location: ${snapshot.data}',
+                    style: TextStyle(fontSize: 18),
+                  );
                 } else {
-                  return Text('No folder selected', style: TextStyle(fontSize: 18));
+                  return Text(
+                    'No folder selected',
+                    style: TextStyle(fontSize: 18),
+                  );
                 }
               },
             ),
@@ -46,9 +52,11 @@ class FileStorage extends StatelessWidget {
                   context: context,
                   title: 'Select a Folder',
                   allowedExtensions: null, // Allow all types
-                  rootDirectory: Directory('/'), // Start from root
+                  rootDirectory: Directory('C:/'), // Start from root
                   fsType: FilesystemType.folder, // Specify folder type
                   showGoUp: true, // Show option to go up
+                  // Use absolute path for the root directory
+                  // Example: Directory('/absolute/path/to/start')
                 );
 
                 if (path != null) {
@@ -67,7 +75,10 @@ class FileStorage extends StatelessWidget {
                   );
                 }
               },
-              child: Text('Please Select a Folder', style: TextStyle(fontSize: 24)),
+              child: Text(
+                'Please Select a Folder',
+                style: TextStyle(fontSize: 24),
+              ),
             ),
           ],
         ),
