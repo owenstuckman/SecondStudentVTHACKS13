@@ -176,13 +176,23 @@ class SlashMenuItemData {
     required this.title,
     required this.subtitle,
     this.isLabel = false,
+    this.isSeparator = false, 
   });
+
+  const SlashMenuItemData.separator()
+      : action = SlashMenuAction.paragraph,
+        icon = Icons.more_horiz,
+        title = '',
+        subtitle = '',
+        isLabel = false,
+        isSeparator = true;
 
   final SlashMenuAction action;
   final IconData icon;
   final String title;
   final String subtitle;
   final bool isLabel; // non-selectable header row
+  final bool isSeparator; // separator row
 }
 
 class _SlashMenuItem extends StatelessWidget {
@@ -203,6 +213,13 @@ class _SlashMenuItem extends StatelessWidget {
     final theme = Theme.of(context);
     final displayText = '${data.title}  •  ${data.subtitle}';
 
+    if (data.isSeparator) {
+      return const Padding(                    // 👈 render the divider
+        padding: EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+        child: Divider(height: 1),
+      );
+    }
+    
     if (data.isLabel) {
       return Container(
         height: height,
