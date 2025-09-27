@@ -10,7 +10,7 @@ import 'package:secondstudent/pages/startup/welcome_page.dart';
 import '../account/account.dart';
 import '../settings/settings.dart';
 import '../../globals/static/custom_widgets/swipe_page_route.dart';
-import '../../../editor.dart';
+import '../editor/editor.dart';
 import 'package:secondstudent/globals/static/custom_widgets/logo.dart';
 import 'package:secondstudent/globals/stream_signal.dart';
 import 'package:secondstudent/pages/calendar/calendar.dart';
