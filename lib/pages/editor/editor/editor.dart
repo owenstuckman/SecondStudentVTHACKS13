@@ -10,9 +10,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'package:flutter_quill_extensions/flutter_quill_extensions.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 // Custom blocks: helpers (normalize/insert/addEditNote, Notes builder, etc.)
 import 'package:secondstudent/pages/editor/custom_blocks/customblocks.dart';
+import 'package:secondstudent/pages/editor/custom_blocks/page_link_service.dart';
+import 'package:secondstudent/pages/editor/custom_blocks/pdf_block.dart';
 
 // Iframe builder lives here (per your note)
 import 'package:secondstudent/pages/editor/custom_blocks/iframe_block.dart';
@@ -355,6 +358,13 @@ class _EditorScreenState extends State<EditorScreen> {
         );
         break;
 
+      case SlashMenuAction.pageLink:
+        await PageLinkService.insertPageLink(
+          context: context,
+          controller: _controller,
+        );
+        break;
+
       case SlashMenuAction.image:
         _promptForUrl(context, label: 'Image URL').then((url) {
           if (url == null || url.isEmpty) return;
@@ -410,6 +420,33 @@ class _EditorScreenState extends State<EditorScreen> {
             return;
           }
           cb.insertIframe(_controller, normalized, height: 560);
+        });
+        break;
+
+      case SlashMenuAction.embedPdf:
+        _promptForUrl(
+          context,
+          label: 'PDF URL (https://), data: URI, or assets/path.pdf',
+        ).then((url) {
+          if (url == null || url.isEmpty) return;
+          final insertAt = _controller.selection.isValid
+              ? _controller.selection.start
+              : _controller.document.length;
+          final block = quill.BlockEmbed.custom(
+            PdfBlockEmbed(url: url, height: 560),
+          );
+          _controller.replaceText(
+            insertAt,
+            0,
+            block,
+            TextSelection.collapsed(offset: insertAt + 1),
+          );
+          _controller.replaceText(
+            insertAt + 1,
+            0,
+            '\n',
+            TextSelection.collapsed(offset: insertAt + 2),
+          );
         });
         break;
     }
@@ -528,10 +565,33 @@ class _EditorScreenState extends State<EditorScreen> {
                         scrollable: true,
                         autoFocus: true,
                         placeholder: 'Type / to open the command menu.',
+                        linkActionPickerDelegate:
+                            (ctx, link, isReadOnly) async =>
+                                quill.LinkMenuAction.launch,
+                        onLaunchUrl: (url) async {
+                          final handled = await PageLinkService.handleLaunchUrl(
+                            url,
+                            context: context,
+                            onOpenJson: (absPath) async {
+                              final json = await File(absPath).readAsString();
+                              loadFromJsonString(json, sourcePath: absPath);
+                            },
+                          );
+                          if (!handled) {
+                            final uri = Uri.tryParse(url);
+                            if (uri != null) {
+                              try {
+                                await launchUrl(
+                                  uri,
+                                  mode: LaunchMode.externalApplication,
+                                );
+                              } catch (_) {}
+                            }
+                          }
+                        },
                         embedBuilders: [
-                          // From lib/pages/editor/custom_blocks/iframe_block.dart
+                          const PdfEmbedBuilder(), 
                           const IframeEmbedBuilder(),
-                          // From customblocks.dart barrel
                           NotesEmbedBuilder(
                             onTapEdit: (ctx, {document, existingOffset}) =>
                                 cb.addEditNote(
@@ -544,9 +604,8 @@ class _EditorScreenState extends State<EditorScreen> {
                           ...FlutterQuillEmbeds.editorBuilders(
                             imageEmbedConfig: QuillEditorImageEmbedConfig(
                               imageProviderBuilder: (context, imageUrl) {
-                                if (imageUrl.startsWith('assets/')) {
+                                if (imageUrl.startsWith('assets/'))
                                   return AssetImage(imageUrl);
-                                }
                                 return null;
                               },
                             ),
@@ -558,6 +617,7 @@ class _EditorScreenState extends State<EditorScreen> {
                       ),
                     ),
                   ),
+
                   if (_isSlashMenuOpen)
                     Align(
                       alignment: Alignment.bottomLeft,

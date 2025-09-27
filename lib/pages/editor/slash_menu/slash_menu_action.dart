@@ -13,4 +13,6 @@ enum SlashMenuAction {
   addEditNote,
   iframeExcalidraw,
   iframeGoogleDoc,
+  pageLink,
+  embedPdf,
 }
