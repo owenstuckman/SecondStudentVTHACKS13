@@ -47,11 +47,15 @@ dependencies:
   upgrader: ^12.1.0
   url_launcher: ^6.3.2
   http: ^1.5.0
-  webview_flutter: ^4.13.0
   image_picker: ^1.2.0
   octo_image: ^2.1.0
   flutter_flip_card: ^0.0.6
   localstorage: ^6.0.0
+  webview_flutter: ^4.7.0
+  webview_flutter_android: ^3.16.2
+  webview_flutter_wkwebview: ^3.12.0
+  webview_flutter_web: ^0.2.2+7 
+  # web: ^1.1.1
 
 dev_dependencies:
   flutter_test:
