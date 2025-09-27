@@ -16,6 +16,7 @@ import 'package:secondstudent/globals/stream_signal.dart';
 import 'package:secondstudent/pages/calendar/calendar.dart';
 import 'package:secondstudent/pages/todo/todo.dart';
 import 'file_storage.dart';
+import 'package:secondstudent/pages/editor/workspace.dart';
 
 /*
 Home Page Class
@@ -182,7 +183,7 @@ class HomePageState extends State<HomePage> {
                   controller: _pageController,
                   onPageChanged: (index) => setState(() => pageIndex = index),
                   // ORDER must match _navItems above
-                  children: [EditorScreen(), Calendar(), ToDo()],
+                  children: [EditorWorkspace(), Calendar(), ToDo()],
                 ),
               ),
             ],
@@ -256,8 +257,8 @@ class HomePageState extends State<HomePage> {
                     onTap: () =>
                         context.pushSwipePage(Settings(), title: "Settings"),
                   ),
-                  // FILE STORAGE LOCATION
 
+                  // FILE STORAGE LOCATION
                   ListTile(
                     leading: const Icon(Icons.file_copy_outlined),
                     title: const Text('File Location'),

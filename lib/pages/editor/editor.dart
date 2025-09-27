@@ -1,18 +1,17 @@
-// lib/editor.dart — Quill-backed editor with JSON load/save + starter + download
+// lib/editor.dart — Quill-backed editor with JSON load/save and external load API
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:io';
-import 'dart:convert';
-import 'package:flutter/material.dart';
-import 'package:file_saver/file_saver.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'package:flutter_quill_extensions/flutter_quill_extensions.dart';
-import 'package:secondstudent/pages/editor/customblocks.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+// If you use your slash menu and custom actions, keep these:
 import 'slash_menu.dart';
 import 'slash_menu_action.dart';
 import 'default_slash_menu_items.dart';
@@ -27,7 +26,7 @@ class EditorScreen extends StatefulWidget {
 class _EditorScreenState extends State<EditorScreen> {
   static const String _prefsKey = 'editor_doc_delta';
 
-  /// A simple starter Quill Delta (JSON) for new docs
+  /// Starter Quill Delta (JSON) for new docs
   static const List<Map<String, dynamic>> _starterDelta = [
     {
       "insert": "SecondStudent\n",
@@ -48,7 +47,10 @@ class _EditorScreenState extends State<EditorScreen> {
   late quill.QuillController _controller;
   StreamSubscription? _docSub;
 
-  // Slash menu state
+  // Track the file currently open in the editor. If null, Save warns the user.
+  String? _currentFilePath;
+
+  // Slash menu state (keep if you use it)
   bool _isSlashMenuOpen = false;
   String _slashQuery = '';
   final ValueNotifier<int> _slashSelectionIndex = ValueNotifier<int>(0);
@@ -98,6 +100,7 @@ class _EditorScreenState extends State<EditorScreen> {
       document: doc,
       selection: const TextSelection.collapsed(offset: 0),
     );
+    _currentFilePath = null; // new untitled doc
     _attachDocListener();
     if (mounted) setState(() {});
   }
@@ -115,55 +118,79 @@ class _EditorScreenState extends State<EditorScreen> {
     return Uint8List.fromList(utf8.encode(jsonStr));
   }
 
-  /// Download/save the current Delta JSON using file_saver (works on web/desktop/mobile).
-  Future<void> _downloadDeltaJson() async {
-    final bytes = _exportDeltaBytes();
-
-    final prefs = await SharedPreferences.getInstance();
-    final dir = prefs.getString('path_to_files') ?? "";
-    
-    // Check if the directory is valid
-    if (dir.isEmpty) {
-      if (context.mounted) {
+  /// Load JSON (Quill Delta array) into the editor.
+  /// Optionally records the file path so "Save" writes back to it.
+  void loadFromJsonString(String json, {String? sourcePath}) {
+    try {
+      final ops = (jsonDecode(json) as List).cast<Map<String, dynamic>>();
+      final doc = quill.Document.fromJson(ops);
+      setState(() {
+        _controller = quill.QuillController(
+          document: doc,
+          selection: const TextSelection.collapsed(offset: 0),
+        );
+        _currentFilePath = sourcePath;
+      });
+      _attachDocListener();
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Invalid file path. Please set a valid path in settings.')),
+          SnackBar(
+            content: Text(
+              sourcePath == null
+                  ? 'Loaded JSON'
+                  : 'Loaded ${_basename(sourcePath)}',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to load JSON: $e')));
+      }
+    }
+  }
+
+  /// Save back to the current file path (set when opening from the file viewer).
+  Future<void> saveToCurrentFile() async {
+    if (_currentFilePath == null || _currentFilePath!.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'No file bound. Open a JSON file from the list first.',
+            ),
+          ),
         );
       }
       return;
     }
-
-    final jsonString = utf8.decode(bytes);
-    // need to correct how its named
-    final file = File('$dir/File.json');
-
     try {
-      // Create a blank file before writing
-      await file.create(recursive: true);
-      
-      // Write to file
+      final jsonString = utf8.decode(_exportDeltaBytes());
+      final file = File(_currentFilePath!);
       await file.writeAsString(jsonString);
-      if (context.mounted) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Saved file to ${file.path}')),
+          SnackBar(content: Text('Saved ${_basename(file.path)}')),
         );
       }
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error saving file: $e')),
-        );
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error saving: $e')));
       }
     }
   }
 
-  @override
-  void dispose() {
-    _docSub?.cancel();
-    _controller.dispose();
-    super.dispose();
+  String _basename(String path) {
+    final parts = path.split(Platform.pathSeparator);
+    return parts.isEmpty ? path : parts.last;
   }
 
-  // --- Slash menu helpers ---
+  // ---------------- Slash menu helpers (optional) ----------------
+
   List<SlashMenuItemData> get _allSlashItems =>
       DefaultSlashMeuItems().defaultSlashMenuItems;
 
@@ -299,12 +326,13 @@ class _EditorScreenState extends State<EditorScreen> {
         _controller.formatSelection(quill.Attribute.codeBlock);
         break;
       case SlashMenuAction.addEditNote:
-        addEditNote(context);
+        // Hook your addEditNote(context) here if you use it.
+        // addEditNote(context);
+        break;
       case SlashMenuAction.image:
         _promptForUrl(context, label: 'Image URL').then((url) {
           if (url == null || url.isEmpty) return;
           final idx = _controller.selection.baseOffset;
-          // Prefer embed if your flutter_quill version supports it
           _controller.replaceText(
             idx,
             0,
@@ -390,6 +418,9 @@ class _EditorScreenState extends State<EditorScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Expose the editor API so the file viewer can call loadFromJsonString(...)
+    attachEditorApi(context, _EditorApiImpl(this));
+
     final filteredItems = _filteredSlashItems;
     return Focus(
       canRequestFocus: false,
@@ -397,20 +428,29 @@ class _EditorScreenState extends State<EditorScreen> {
       onKeyEvent: _onKeyEvent,
       child: Column(
         children: [
-          // Tiny toolbar
+          // Toolbar
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
             child: Row(
               children: [
                 FilledButton.tonal(
                   onPressed: _newFromStarter,
-                  child: const Text('New from starter'),
+                  child: const Text('New File'),
                 ),
                 const SizedBox(width: 8),
                 FilledButton(
-                  onPressed: _downloadDeltaJson,
-                  child: const Text('Download JSON'),
+                  onPressed: saveToCurrentFile,
+                  child: const Text('Save'),
                 ),
+                const SizedBox(width: 12),
+                if (_currentFilePath != null)
+                  Flexible(
+                    child: Text(
+                      'Editing: ${_basename(_currentFilePath!)}',
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelMedium,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -433,19 +473,14 @@ class _EditorScreenState extends State<EditorScreen> {
                           ...FlutterQuillEmbeds.editorBuilders(
                             imageEmbedConfig: QuillEditorImageEmbedConfig(
                               imageProviderBuilder: (context, imageUrl) {
-                                // https://pub.dev/packages/flutter_quill_extensions#-image-assets
                                 if (imageUrl.startsWith('assets/')) {
                                   return AssetImage(imageUrl);
                                 }
                                 return null;
                               },
                             ),
-                            videoEmbedConfig: QuillEditorVideoEmbedConfig(
-                              customVideoBuilder: (videoUrl, readOnly) {
-                                // To load YouTube videos https://github.com/singerdmx/flutter-quill/releases/tag/v10.8.0
-                                return null;
-                              },
-                            ),
+                            videoEmbedConfig:
+                                const QuillEditorVideoEmbedConfig(),
                           ),
                         ],
                         textInputAction: TextInputAction.newline,
@@ -472,5 +507,60 @@ class _EditorScreenState extends State<EditorScreen> {
         ],
       ),
     );
+  }
+
+  // Call this when a file the editor is currently bound to gets renamed.
+  void updateCurrentFilePath(String newPath) {
+    setState(() {
+      _currentFilePath = newPath;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('File renamed. Now editing: ${_basename(newPath)}'),
+      ),
+    );
+  }
+}
+
+// ================= Editor API injector (to allow external load) =================
+
+/// Editor API the host (workspace/file viewer) can call.
+abstract class _EditorScreenApi {
+  void loadFromJson(String json, String filePath);
+}
+
+/// Lightweight inherited widget to expose an API to the editor.
+class _EditorApiInjector extends InheritedWidget {
+  final void Function(_EditorScreenApi api) onCreateApi;
+
+  const _EditorApiInjector({
+    required this.onCreateApi,
+    required super.child,
+    super.key,
+  });
+
+  static _EditorApiInjector? of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_EditorApiInjector>();
+
+  @override
+  bool updateShouldNotify(covariant InheritedWidget oldWidget) => false;
+}
+
+/// Extend EditorScreen’s State to register an API instance.
+extension _EditorScreenApiHook on State<EditorScreen> {
+  void attachEditorApi(BuildContext context, _EditorScreenApi api) {
+    final injector = _EditorApiInjector.of(context);
+    if (injector != null) injector.onCreateApi(api);
+  }
+}
+
+/// Concrete API implementation that delegates to the editor state.
+class _EditorApiImpl implements _EditorScreenApi {
+  final _EditorScreenState _state;
+  _EditorApiImpl(State<EditorScreen> s) : _state = s as _EditorScreenState;
+
+  @override
+  void loadFromJson(String json, String filePath) {
+    _state.loadFromJsonString(json, sourcePath: filePath);
   }
 }
