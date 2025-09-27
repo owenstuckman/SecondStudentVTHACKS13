@@ -1,21 +1,27 @@
 // lib/node_dnd.dart
 import 'dart:math' as math;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:super_editor/super_editor.dart' as se;
 
-/// Drag-to-reorder handles for Super Editor.
-/// You mount this in a root Overlay (you're already doing that in editor.dart).
+/// Notion-like drag-to-reorder layer for Super Editor.
+/// Mount this in a root Overlay and anchor it with a CompositedTransformFollower.
 class NodeDragLayer extends StatefulWidget {
   const NodeDragLayer({
     super.key,
     required this.document,
     required this.editor,
     required this.documentLayoutKey,
-    this.handleWidth = 28,
-    this.handlePadding = 6,
-    this.handleGap = 8, // gap between node's left edge and the handle
+    this.handleWidth = 36, // visual width of handle
+    this.handlePadding = 8, // inner padding
+    this.handleGap = 6, // gap between node left edge and handle
     this.handleBuilder,
     this.onReorder,
+    this.autoscrollEdgePx = 56,
+    this.autoscrollMaxSpeed = 22,
+    this.showLineNumbers = true,
+    this.lineNumberWidth = 28,
   });
 
   final se.MutableDocument document;
@@ -29,39 +35,91 @@ class NodeDragLayer extends StatefulWidget {
   final Widget Function(BuildContext, bool isDragging)? handleBuilder;
   final void Function(int from, int to)? onReorder;
 
+  /// Pixels from top/bottom where we start autoscrolling.
+  final double autoscrollEdgePx;
+
+  /// Max autoscroll speed in px per frame (roughly).
+  final double autoscrollMaxSpeed;
+
+  /// Whether to display a left-aligned line number gutter.
+  final bool showLineNumbers;
+
+  /// Fixed width for the line number gutter.
+  final double lineNumberWidth;
+
   @override
   State<NodeDragLayer> createState() => _NodeDragLayerState();
 }
 
-class _NodeDragLayerState extends State<NodeDragLayer> {
+class _NodeDragLayerState extends State<NodeDragLayer>
+    with SingleTickerProviderStateMixin {
   String? _draggingNodeId;
   int? _targetSlot;
   int? _lastSlot;
-  _DropDirection _dragDirection = _DropDirection.neutral;
 
-  late final se.DocumentChangeListener _docListener;
+  // Live cursor y (global), used to place the indicator smoothly.
+  double? _cursorGlobalDy;
+
+  // Cached lane list (recomputed frequently during drag).
+  List<_Lane> _lanes = const [];
+
+  // Animated indicator Y (local to our Stack).
+  late final AnimationController _indicatorCtrl;
+  late Animation<double> _indicatorAnim;
+  double? _indicatorTargetY;
+
+  // Simple autoscroll
+  ScrollPosition? _scrollPos;
+  double _autoscrollVelocity = 0;
+  bool _autoscrolling = false;
 
   @override
   void initState() {
     super.initState();
-    _docListener = (se.DocumentChangeLog _) {
-      if (mounted) setState(() {}); // repaint when the doc changes
-    };
-    widget.document.addListener(_docListener);
+
+    _indicatorCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 90),
+    );
+    _indicatorAnim = _indicatorCtrl.drive(
+      Tween(begin: 0.0, end: 0.0).chain(CurveTween(curve: Curves.easeOut)),
+    );
+
+    // Rebuild lanes whenever the document changes.
+    widget.document.addListener(_onDocumentChange);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _attachScrollable();
+      _rebuildLanes();
+      setState(() {});
+    });
+  }
+
+  void _attachScrollable() {
+    // Best-effort: find the nearest scrollable where SuperEditor sits.
+    _scrollPos = Scrollable.of(context).position;
+  }
+
+  void _onDocumentChange(se.DocumentChangeLog _) {
+    if (!mounted) return;
+    _rebuildLanes();
+    setState(() {});
   }
 
   @override
   void didUpdateWidget(NodeDragLayer oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.document != widget.document) {
-      oldWidget.document.removeListener(_docListener);
-      widget.document.addListener(_docListener);
+      oldWidget.document.removeListener(_onDocumentChange);
+      widget.document.addListener(_onDocumentChange);
+      _rebuildLanes();
     }
   }
 
   @override
   void dispose() {
-    widget.document.removeListener(_docListener);
+    widget.document.removeListener(_onDocumentChange);
+    _indicatorCtrl.dispose();
     super.dispose();
   }
 
@@ -73,11 +131,18 @@ class _NodeDragLayerState extends State<NodeDragLayer> {
     return null;
   }
 
-  /// Rect for a node in **global** coordinates, using the node's upstream (or text 0) position.
+  List<se.DocumentNode> _allNodes() {
+    final out = <se.DocumentNode>[];
+    for (int i = 0; i < widget.document.length; i++) {
+      final n = widget.document.getNodeAt(i);
+      if (n != null) out.add(n);
+    }
+    return out;
+  }
+
   Rect? _nodeRectGlobal(String nodeId) {
     final layout = _layout;
     if (layout == null) return null;
-
     final node = widget.document.getNodeById(nodeId);
     if (node == null) return null;
 
@@ -90,95 +155,126 @@ class _NodeDragLayerState extends State<NodeDragLayer> {
     );
     if (localRect == null) return null;
 
-    // Convert from document layout space -> global.
     final tl = layout.getGlobalOffsetFromDocumentOffset(localRect.topLeft);
     final br = layout.getGlobalOffsetFromDocumentOffset(localRect.bottomRight);
     return Rect.fromPoints(tl, br);
   }
 
-  List<se.DocumentNode> _allNodes() {
-    final out = <se.DocumentNode>[];
-    for (int i = 0; i < widget.document.length; i++) {
-      final n = widget.document.getNodeAt(i);
-      if (n != null) out.add(n);
-    }
-    return out;
-  }
-
-  /// Slot (0..len) where the drop line should appear for a given **global** Y.
-  int? _computeInsertionSlot(double globalDy) {
+  void _rebuildLanes() {
     final nodes = _allNodes();
-    if (nodes.isEmpty) return 0;
-
     final lanes = <_Lane>[];
     for (final node in nodes) {
       final r = _nodeRectGlobal(node.id);
-      if (r != null) lanes.add(_Lane(nodeId: node.id, top: r.top, bottom: r.bottom));
-    }
-    if (lanes.isEmpty) return null;
-
-    if (globalDy <= lanes.first.top) return 0;
-    if (globalDy >= lanes.last.bottom) return lanes.length;
-
-    for (int i = 0; i < lanes.length - 1; i++) {
-      final gapTop = lanes[i].bottom;
-      final gapBottom = lanes[i + 1].top;
-      if (globalDy >= gapTop && globalDy <= gapBottom) {
-        return i + 1;
+      if (r != null) {
+        lanes.add(
+          _Lane(nodeId: node.id, top: r.top, bottom: r.bottom, left: r.left),
+        );
       }
     }
-
-    for (int i = 0; i < lanes.length; i++) {
-      final mid = (lanes[i].top + lanes[i].bottom) / 2;
-      if (globalDy >= lanes[i].top && globalDy <= lanes[i].bottom) {
-        return globalDy < mid ? i : i + 1;
-      }
-    }
-    return null;
+    _lanes = lanes;
   }
 
-  void _onDragStart(String nodeId, int index, double globalDy) {
-    final slot = _computeInsertionSlot(globalDy) ?? index;
+  // Find drop slot by dy (global) using binary search + midpoint rule.
+  int? _slotForDy(double dy) {
+    if (_lanes.isEmpty) return 0;
+    if (dy <= _lanes.first.top) return 0;
+    if (dy >= _lanes.last.bottom) return _lanes.length;
+
+    int lo = 0, hi = _lanes.length - 1;
+    while (lo <= hi) {
+      final mid = (lo + hi) >> 1;
+      final lane = _lanes[mid];
+      if (dy < lane.top) {
+        hi = mid - 1;
+      } else if (dy > lane.bottom) {
+        lo = mid + 1;
+      } else {
+        final m = (lane.top + lane.bottom) / 2;
+        return dy < m ? mid : mid + 1;
+      }
+    }
+    return lo;
+  }
+
+  void _startDrag(String nodeId, int index, double globalDy) {
+    if (_lanes.isEmpty) _rebuildLanes();
+    final slot = _slotForDy(globalDy) ?? index;
+    _cursorGlobalDy = globalDy;
+    _updateIndicatorTargetForSlot(slot);
     setState(() {
       _draggingNodeId = nodeId;
       _targetSlot = slot;
       _lastSlot = slot;
-      _dragDirection = _DropDirection.neutral;
     });
   }
 
-  void _onDragUpdate(DragUpdateDetails details) {
-    if (_draggingNodeId == null) return;
+  void _updateIndicatorTargetForSlot(int slot) {
+    final stackBox = context.findRenderObject() as RenderBox?;
+    if (stackBox == null || _lanes.isEmpty) return;
 
-    final slot = _computeInsertionSlot(details.globalPosition.dy);
-    if (slot == null) {
-      setState(() {
-        _targetSlot = null;
-        _dragDirection = _DropDirection.neutral;
-      });
-      return;
+    double y;
+    if (slot == 0) {
+      y = stackBox.globalToLocal(Offset(0, _lanes.first.top)).dy;
+    } else if (slot == _lanes.length) {
+      y = stackBox.globalToLocal(Offset(0, _lanes.last.bottom)).dy;
+    } else {
+      final above = _lanes[slot - 1];
+      final below = _lanes[slot];
+      y = stackBox.globalToLocal(Offset(0, (above.bottom + below.top) / 2)).dy;
     }
 
-    if (_lastSlot != null) {
-      _dragDirection = slot > _lastSlot!
-          ? _DropDirection.down
-          : slot < _lastSlot!
-              ? _DropDirection.up
-              : _DropDirection.neutral;
-    }
-    _lastSlot = slot;
-
-    setState(() => _targetSlot = slot);
+    // Animate the indicator toward the new target for a “snap while following” feel.
+    final begin = (_indicatorAnim.value);
+    _indicatorAnim = _indicatorCtrl.drive(
+      Tween<double>(
+        begin: begin,
+        end: y,
+      ).chain(CurveTween(curve: Curves.easeOut)),
+    );
+    _indicatorCtrl
+      ..value = 0
+      ..forward();
+    _indicatorTargetY = y;
   }
 
-  void _onDragEnd() {
-    if (_draggingNodeId == null || _targetSlot == null) {
+  void _onPointerMove(PointerMoveEvent e) {
+    if (_draggingNodeId == null) return;
+
+    _cursorGlobalDy = e.position.dy;
+
+    // Rebuild lanes every move to avoid misalignment when layout changes.
+    _rebuildLanes();
+
+    final slot = _slotForDy(_cursorGlobalDy!);
+    if (slot == null) return;
+
+    if (_targetSlot != slot) {
+      _updateIndicatorTargetForSlot(slot);
+      _lastSlot = _targetSlot;
+      _targetSlot = slot;
+      setState(() {});
+    }
+
+    _maybeAutoscroll(e.position);
+  }
+
+  void _onPointerUpCancel() {
+    if (_draggingNodeId == null) return;
+    _finishDrag();
+  }
+
+  void _finishDrag() {
+    final nodeId = _draggingNodeId;
+    final slot = _targetSlot;
+    _stopAutoscroll();
+
+    if (nodeId == null || slot == null) {
       _resetDrag();
       return;
     }
 
-    final fromIndex = widget.document.getNodeIndexById(_draggingNodeId!);
-    var toIndex = _targetSlot!;
+    final fromIndex = widget.document.getNodeIndexById(nodeId);
+    var toIndex = slot;
 
     if (toIndex > fromIndex) {
       toIndex -= 1; // remove-then-insert shift
@@ -187,9 +283,18 @@ class _NodeDragLayerState extends State<NodeDragLayer> {
     final maxIndex = widget.document.length - 1;
     if (toIndex != fromIndex && toIndex >= 0 && toIndex <= maxIndex) {
       final node = widget.document.getNodeAt(fromIndex)!;
-      widget.editor.execute([se.MoveNodeRequest(nodeId: node.id, newIndex: toIndex)]);
+      widget.editor.execute([
+        se.MoveNodeRequest(nodeId: node.id, newIndex: toIndex),
+      ]);
       widget.onReorder?.call(fromIndex, toIndex);
     }
+
+    // After the move, layout shifts. Rebuild lanes on the next frame.
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _rebuildLanes();
+      setState(() {});
+    });
 
     _resetDrag();
   }
@@ -199,29 +304,69 @@ class _NodeDragLayerState extends State<NodeDragLayer> {
       _draggingNodeId = null;
       _targetSlot = null;
       _lastSlot = null;
-      _dragDirection = _DropDirection.neutral;
+      _cursorGlobalDy = null;
+      _indicatorTargetY = null;
     });
   }
 
-  double? _indicatorYLocal(RenderBox stackBox, List<se.DocumentNode> nodes) {
-    if (_targetSlot == null) return null;
+  // --- Autoscroll while dragging near edges ---
+  void _maybeAutoscroll(Offset globalPos) {
+    final rb = context.findRenderObject() as RenderBox?;
+    if (rb == null || _scrollPos == null) return;
+    final local = rb.globalToLocal(globalPos);
+    final size = rb.size;
 
-    if (_targetSlot == 0 && nodes.isNotEmpty) {
-      final r = _nodeRectGlobal(nodes.first.id);
-      return r == null ? null : stackBox.globalToLocal(r.topLeft).dy;
+    double v = 0;
+    if (local.dy < widget.autoscrollEdgePx) {
+      final t =
+          (widget.autoscrollEdgePx - local.dy) /
+          widget.autoscrollEdgePx; // 0..1
+      v = -widget.autoscrollMaxSpeed * t;
+    } else if (local.dy > size.height - widget.autoscrollEdgePx) {
+      final t =
+          (local.dy - (size.height - widget.autoscrollEdgePx)) /
+          widget.autoscrollEdgePx;
+      v = widget.autoscrollMaxSpeed * t;
     }
-    if (_targetSlot == nodes.length && nodes.isNotEmpty) {
-      final r = _nodeRectGlobal(nodes.last.id);
-      return r == null ? null : stackBox.globalToLocal(r.bottomLeft).dy;
+
+    if (v == 0) {
+      _stopAutoscroll();
+      return;
     }
-    if (_targetSlot! > 0 && _targetSlot! < nodes.length) {
-      final above = _nodeRectGlobal(nodes[_targetSlot! - 1].id);
-      final below = _nodeRectGlobal(nodes[_targetSlot!].id);
-      if (above == null || below == null) return null;
-      final midY = (above.bottom + below.top) / 2;
-      return stackBox.globalToLocal(Offset(0, midY)).dy;
+
+    _autoscrollVelocity = v;
+    if (!_autoscrolling) {
+      _autoscrolling = true;
+      _tickAutoscroll();
     }
-    return null;
+  }
+
+  void _stopAutoscroll() {
+    _autoscrolling = false;
+    _autoscrollVelocity = 0;
+  }
+
+  void _tickAutoscroll() {
+    if (!_autoscrolling || _scrollPos == null) return;
+    _scrollPos!.jumpTo(
+      (_scrollPos!.pixels + _autoscrollVelocity).clamp(
+        _scrollPos!.minScrollExtent,
+        _scrollPos!.maxScrollExtent,
+      ),
+    );
+    // Recompute lanes after scroll so indicator/handles stay aligned.
+    _rebuildLanes();
+    if (_cursorGlobalDy != null) {
+      final slot = _slotForDy(_cursorGlobalDy!);
+      if (slot != null && _targetSlot != slot) {
+        _updateIndicatorTargetForSlot(slot);
+        _targetSlot = slot;
+      }
+    }
+    // Schedule next frame
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _autoscrolling) _tickAutoscroll();
+    });
   }
 
   @override
@@ -232,70 +377,33 @@ class _NodeDragLayerState extends State<NodeDragLayer> {
     final stackBox = context.findRenderObject() as RenderBox?;
     if (stackBox == null) return const SizedBox.shrink();
 
-    final nodes = _allNodes();
+    // Optional: line numbers, left-aligned at x = 0.
+    final lineNumbers = <Widget>[];
+    if (widget.showLineNumbers) {
+      for (var i = 0; i < _lanes.length; i++) {
+        final lane = _lanes[i];
+        final topLeftLocal = stackBox.globalToLocal(Offset(0, lane.top));
+        final bottomLeftLocal = stackBox.globalToLocal(Offset(0, lane.bottom));
+        final height = math.max(20.0, bottomLeftLocal.dy - topLeftLocal.dy);
 
-    // Per-node handles, positioned beside each node's left edge.
-    final handles = <Widget>[];
-    for (var i = 0; i < nodes.length; i++) {
-      final node = nodes[i];
-      final r = _nodeRectGlobal(node.id);
-      if (r == null) continue;
-
-      final topLeftLocal = stackBox.globalToLocal(r.topLeft);
-      final bottomLeftLocal = stackBox.globalToLocal(Offset(r.left, r.bottom));
-
-      final top = topLeftLocal.dy;
-      final height = math.max(24.0, bottomLeftLocal.dy - topLeftLocal.dy);
-
-      // Place the handle just to the LEFT of this node's left edge.
-      final handleLeft = (topLeftLocal.dx - widget.handleGap - widget.handleWidth).clamp(0.0, double.infinity);
-
-      handles.add(Positioned(
-        left: handleLeft,
-        top: top,
-        width: widget.handleWidth,
-        height: height,
-        child: _Handle(
-          nodeId: node.id,
-          index: i,
-          padding: widget.handlePadding,
-          isDragging: _draggingNodeId == node.id,
-          builder: widget.handleBuilder,
-          onDragStart: _onDragStart,
-          onDragUpdate: _onDragUpdate,
-          onDragEnd: _onDragEnd,
-        ),
-      ));
-    }
-
-    // Drop indicator line
-    Widget indicator = const SizedBox.shrink();
-    if (_targetSlot != null) {
-      final y = _indicatorYLocal(stackBox, nodes);
-      if (y != null) {
-        indicator = Positioned(
-          left: 0,
-          right: 0,
-          top: y - (_dragDirection == _DropDirection.neutral ? 1 : 2),
-          child: IgnorePointer(
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 120),
-              curve: Curves.easeOut,
-              height: 2,
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary,
-                boxShadow: _dragDirection == _DropDirection.neutral
-                    ? null
-                    : [
-                        BoxShadow(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .primary
-                              .withValues(alpha: 0.30),
-                          blurRadius: 6,
-                          offset: Offset(0, _dragDirection == _DropDirection.up ? -1 : 1),
-                        ),
-                      ],
+        lineNumbers.add(
+          Positioned(
+            left: 0,
+            top: topLeftLocal.dy,
+            width: widget.lineNumberWidth,
+            height: height,
+            child: IgnorePointer(
+              ignoring: true,
+              child: Container(
+                alignment: Alignment.centerLeft,
+                padding: const EdgeInsets.only(left: 4),
+                child: Text(
+                  "${i + 1}",
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: Theme.of(context).colorScheme.outline,
+                      ),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ),
           ),
@@ -303,13 +411,72 @@ class _NodeDragLayerState extends State<NodeDragLayer> {
       }
     }
 
-    // While dragging, capture movement anywhere so the editor doesn’t steal gestures.
-    final dragCapture = (_draggingNodeId != null)
+    // Build handles beside each lane.
+    final handles = <Widget>[];
+    for (var i = 0; i < _lanes.length; i++) {
+      final lane = _lanes[i];
+
+      final topLeftLocal = stackBox.globalToLocal(Offset(lane.left, lane.top));
+      final bottomLeftLocal = stackBox.globalToLocal(
+        Offset(lane.left, lane.bottom),
+      );
+      final height = math.max(34.0, bottomLeftLocal.dy - topLeftLocal.dy);
+
+      final handleLeft = (topLeftLocal.dx - widget.handleGap - widget.handleWidth)
+          .clamp(widget.lineNumberWidth + 4, double.infinity);
+
+      handles.add(
+        Positioned(
+          left: handleLeft,
+          top: topLeftLocal.dy,
+          width: widget.handleWidth,
+          height: height,
+          child: _Handle(
+            nodeId: lane.nodeId,
+            index: i,
+            padding: widget.handlePadding,
+            isDragging: _draggingNodeId == lane.nodeId,
+            builder: widget.handleBuilder,
+            onStart: _startDrag,
+          ),
+        ),
+      );
+    }
+
+    // Indicator line (animated). If no animation target yet, hide it.
+    final indicator = (_indicatorTargetY != null)
+        ? AnimatedBuilder(
+            animation: _indicatorCtrl,
+            builder: (context, _) {
+              final y = _indicatorAnim.value;
+              return Positioned(
+                left: 0,
+                right: 0,
+                top: y - 1,
+                child: IgnorePointer(
+                  child: Container(
+                    height: 2,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primary,
+                      boxShadow: const [
+                        BoxShadow(blurRadius: 6, offset: Offset(0, 1)),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          )
+        : const SizedBox.shrink();
+
+    // Global pointer listener while dragging for buttery updates.
+    final globalPointerLayer = (_draggingNodeId != null)
         ? Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onPanUpdate: _onDragUpdate,
-              onPanEnd: (_) => _onDragEnd(),
+            child: Listener(
+              behavior: HitTestBehavior.translucent,
+              onPointerMove: _onPointerMove,
+              onPointerUp: (_) => _onPointerUpCancel(),
+              onPointerCancel: (_) => _onPointerUpCancel(),
             ),
           )
         : const SizedBox.shrink();
@@ -317,28 +484,34 @@ class _NodeDragLayerState extends State<NodeDragLayer> {
     return Stack(
       clipBehavior: Clip.none,
       children: [
+        // allow drop anywhere
         Positioned.fill(
           child: DragTarget<int>(
             onWillAcceptWithDetails: (_) => true,
-            onAcceptWithDetails: (_) => _onDragEnd(),
+            onAcceptWithDetails: (_) => _finishDrag(),
             builder: (context, _, __) => const SizedBox.expand(),
           ),
         ),
         indicator,
+        ...lineNumbers,
         ...handles,
-        dragCapture,
+        globalPointerLayer,
       ],
     );
   }
 }
 
-enum _DropDirection { up, down, neutral }
-
 class _Lane {
-  _Lane({required this.nodeId, required this.top, required this.bottom});
+  _Lane({
+    required this.nodeId,
+    required this.top,
+    required this.bottom,
+    required this.left,
+  });
   final String nodeId;
   final double top;
   final double bottom;
+  final double left;
 }
 
 class _Handle extends StatelessWidget {
@@ -347,9 +520,7 @@ class _Handle extends StatelessWidget {
     required this.index,
     required this.padding,
     required this.isDragging,
-    required this.onDragStart,
-    required this.onDragUpdate,
-    required this.onDragEnd,
+    required this.onStart,
     this.builder,
   });
 
@@ -357,14 +528,13 @@ class _Handle extends StatelessWidget {
   final int index;
   final double padding;
   final bool isDragging;
-  final void Function(String nodeId, int index, double globalDy) onDragStart;
-  final void Function(DragUpdateDetails) onDragUpdate;
-  final VoidCallback onDragEnd;
+  final void Function(String nodeId, int index, double globalDy) onStart;
   final Widget Function(BuildContext, bool isDragging)? builder;
 
   @override
   Widget build(BuildContext context) {
-    final child = builder?.call(context, isDragging) ??
+    final child =
+        builder?.call(context, isDragging) ??
         Container(
           alignment: Alignment.center,
           margin: EdgeInsets.all(padding),
@@ -372,19 +542,20 @@ class _Handle extends StatelessWidget {
             color: isDragging
                 ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.15)
                 : Theme.of(context).colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: Theme.of(context).colorScheme.outlineVariant,
+            ),
           ),
-          child: const Icon(Icons.drag_indicator, size: 18),
+          child: const Icon(Icons.drag_indicator, size: 20),
         );
 
+    // Immediate drag with large hit target
     return MouseRegion(
       cursor: SystemMouseCursors.grab,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onPanStart: (details) => onDragStart(nodeId, index, details.globalPosition.dy),
-        onPanUpdate: onDragUpdate,
-        onPanEnd: (_) => onDragEnd(),
+        onPanStart: (d) => onStart(nodeId, index, d.globalPosition.dy),
         child: child,
       ),
     );

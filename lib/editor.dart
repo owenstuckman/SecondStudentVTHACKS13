@@ -14,6 +14,15 @@ class EditorScreen extends StatefulWidget {
   State<EditorScreen> createState() => _EditorScreenState();
 }
 
+// --- Layout knobs (tweak to taste) ---
+const double kPageSidePadding = 20;   // outer page padding
+const double kContentMaxWidth  = 900; // column width
+const double kContentLeftInset = 56;  // text column offset from the left edge
+
+// Drag handle placement (NodeDragLayer also uses these)
+const double kHandleGap   = 6;        // distance handle sits left of text
+const double kHandleWidth = 36;       // visual width of handle box
+
 class _EditorScreenState extends State<EditorScreen> {
   late final se.MutableDocument _document;
   late final se.MutableDocumentComposer _composer;
@@ -22,7 +31,7 @@ class _EditorScreenState extends State<EditorScreen> {
   final FocusNode _editorFocusNode = FocusNode();
   final GlobalKey _documentLayoutKey = GlobalKey();
 
-  // LayerLink that we’ll use to anchor the overlayed drag layer to the editor.
+  // Anchor the overlayed drag layer to the editor.
   final LayerLink _editorLink = LayerLink();
 
   final ValueNotifier<_SlashMenuState> _slashMenuState = ValueNotifier(_SlashMenuHidden());
@@ -74,7 +83,6 @@ class _EditorScreenState extends State<EditorScreen> {
           if (node is! se.ParagraphNode) {
             return se.ExecutionInstruction.continueExecution;
           }
-
           final nodePosition = extent.nodePosition;
           if (nodePosition is! se.TextNodePosition || nodePosition.offset != 0) {
             return se.ExecutionInstruction.continueExecution;
@@ -124,12 +132,11 @@ class _EditorScreenState extends State<EditorScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _editorFocusNode.requestFocus();
-      _mountDragOverlay(); // <— mount the drag layer above EVERYTHING
+      _mountDragOverlay();
     });
   }
 
   void _mountDragOverlay() {
-    // Build a follower that’s locked to the SuperEditor’s paint transform.
     _dragOverlayEntry = OverlayEntry(
       maintainState: true,
       builder: (context) {
@@ -137,13 +144,16 @@ class _EditorScreenState extends State<EditorScreen> {
           link: _editorLink,
           showWhenUnlinked: false,
           offset: Offset.zero,
-          child: IgnorePointer( // allow our layer to receive gestures
-            ignoring: false,
+          child: IgnorePointer(
+            ignoring: false, // we want the layer to handle gestures
             child: SizedBox.expand(
               child: NodeDragLayer(
                 document: _document,
                 editor: _editor,
                 documentLayoutKey: _documentLayoutKey,
+                handleWidth: kHandleWidth,
+                handlePadding: 6,
+                handleGap: kHandleGap,
               ),
             ),
           ),
@@ -151,9 +161,7 @@ class _EditorScreenState extends State<EditorScreen> {
       },
     );
 
-    // Insert at the very top of the root overlay.
     final overlay = Overlay.of(context, rootOverlay: true);
-    assert(overlay != null, 'No root Overlay found. Place MaterialApp above this widget.');
     overlay!.insert(_dragOverlayEntry!);
   }
 
@@ -266,60 +274,74 @@ class _EditorScreenState extends State<EditorScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // The editor stays in the normal tree, but is a CompositedTransformTarget
-    // so the drag layer (in the root Overlay) can follow it exactly.
-    return Stack(
-      children: [
-        CompositedTransformTarget(
-          link: _editorLink,
-          child: se.SuperEditor(
-            editor: _editor,
-            documentLayoutKey: _documentLayoutKey,
-            inputSource: se.TextInputSource.keyboard,
-            focusNode: _editorFocusNode,
-            keyboardActions: [
-              _slashCommandKeyboardAction,
-              ...se.defaultKeyboardActions,
-            ],
-          ),
-        ),
+    // Left-aligned content column with a max width.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final pageWidth   = constraints.maxWidth;
+        final usableWidth = pageWidth - (kPageSidePadding * 2);
+        final contentW    = math.min(usableWidth, kContentMaxWidth);
+        final leftPad     = kPageSidePadding + kContentLeftInset;
+        final rightPad    = (pageWidth - contentW) - leftPad;
 
-        // Slash menu overlay (local)
-        ValueListenableBuilder<_SlashMenuState>(
-          valueListenable: _slashMenuState,
-          builder: (context, state, _) {
-            if (state is! _SlashMenuVisible) return const SizedBox.shrink();
-
-            final renderBox = context.findRenderObject() as RenderBox?;
-            final overlaySize = renderBox?.size ?? Size.zero;
-            final menuHeight = slashMenuTotalHeight(defaultSlashMenuItems.length);
-            const menuWidth = defaultSlashMenuMaxWidth;
-
-            double dx = _slashMenuAnchor.dx - menuWidth / 2;
-            dx = dx.clamp(16.0, math.max(16.0, overlaySize.width - menuWidth - 16));
-
-            double dy = _slashMenuAnchor.dy + 10;
-            final double bottomLimit = overlaySize.height - menuHeight - 16;
-            if (overlaySize.height > 0 && dy > bottomLimit) {
-              dy = _slashMenuAnchor.dy - menuHeight - 10;
-            }
-            dy = dy.clamp(16.0, math.max(16.0, bottomLimit));
-
-            return Positioned(
-              left: dx,
-              top: dy,
-              child: SlashMenu(
-                items: defaultSlashMenuItems,
-                selectionIndexListenable: _slashMenuSelectionIndex,
-                onSelect: _finalizeSlashSelection,
-                onDismiss: () => _hideSlashMenu(insertSlashOnDismiss: true),
-                maxWidth: menuWidth,
+        return Stack(
+          children: [
+            CompositedTransformTarget(
+              link: _editorLink,
+              child: Padding(
+                padding: EdgeInsets.only(left: leftPad, right: rightPad, top: 12, bottom: 24),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: contentW),
+                  child: se.SuperEditor(
+                    editor: _editor,
+                    documentLayoutKey: _documentLayoutKey,
+                    inputSource: se.TextInputSource.keyboard,
+                    focusNode: _editorFocusNode,
+                    keyboardActions: [
+                      _slashCommandKeyboardAction,
+                      ...se.defaultKeyboardActions,
+                    ],
+                  ),
+                ),
               ),
-            );
-          },
-        ),
-        // NOTE: no NodeDragLayer here anymore — it lives in the root overlay.
-      ],
+            ),
+
+            // Slash menu overlay (local)
+            ValueListenableBuilder<_SlashMenuState>(
+              valueListenable: _slashMenuState,
+              builder: (context, state, _) {
+                if (state is! _SlashMenuVisible) return const SizedBox.shrink();
+
+                final renderBox = context.findRenderObject() as RenderBox?;
+                final overlaySize = renderBox?.size ?? Size.zero;
+                final menuHeight = slashMenuTotalHeight(defaultSlashMenuItems.length);
+                const menuWidth = defaultSlashMenuMaxWidth;
+
+                double dx = _slashMenuAnchor.dx - menuWidth / 2;
+                dx = dx.clamp(16.0, math.max(16.0, overlaySize.width - menuWidth - 16));
+
+                double dy = _slashMenuAnchor.dy + 10;
+                final double bottomLimit = overlaySize.height - menuHeight - 16;
+                if (overlaySize.height > 0 && dy > bottomLimit) {
+                  dy = _slashMenuAnchor.dy - menuHeight - 10;
+                }
+                dy = dy.clamp(16.0, math.max(16.0, bottomLimit));
+
+                return Positioned(
+                  left: dx,
+                  top: dy,
+                  child: SlashMenu(
+                    items: defaultSlashMenuItems,
+                    selectionIndexListenable: _slashMenuSelectionIndex,
+                    onSelect: _finalizeSlashSelection,
+                    onDismiss: () => _hideSlashMenu(insertSlashOnDismiss: true),
+                    maxWidth: menuWidth,
+                  ),
+                );
+              },
+            ),
+          ],
+        );
+      },
     );
   }
 }
