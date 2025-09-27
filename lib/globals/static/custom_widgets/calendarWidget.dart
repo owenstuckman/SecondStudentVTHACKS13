@@ -30,8 +30,10 @@ class _CalendarWidgetState extends State<CalendarWidget> {
   final TextEditingController _descriptionController = TextEditingController();
   DateTime? _selectedDate;
 
-  // Sanitizes HTML-ish input: handles <p>, <br>, <h1-6>, <li>, <span>, decodes common entities
-
+  String stripHtml(String input) {
+    final almost = input.replaceAll(RegExp(r'<[^>]+>'), '').trim();
+    return almost.replaceAll('&nbsp;', ' ');
+  }
 
   @override
   void initState() {
@@ -39,7 +41,7 @@ class _CalendarWidgetState extends State<CalendarWidget> {
     _eventController = EventController();
     // Load locally created and previously fetched Canvas events
     final assignments = localStorage.getItem('assignments');
-    if (assignments != null) {
+    if (assignments != null && assignments.isNotEmpty) {
       try {
         final assignmentsList = jsonDecode(assignments);
         if (assignmentsList is List) {
@@ -262,16 +264,32 @@ class _CalendarWidgetState extends State<CalendarWidget> {
         final list = jsonDecode(raw);
         if (list is List) {
           list.add(jsonEvent);
-          localStorage.inclusiveSetItem('assignments', jsonEncode(list));
+          localStorage.inclusiveSetItem(
+            'assignments',
+            jsonEncode(list),
+            context,
+          );
         } else {
-          localStorage.inclusiveSetItem('assignments', jsonEncode([jsonEvent]));
+          localStorage.inclusiveSetItem(
+            'assignments',
+            jsonEncode([jsonEvent]),
+            context,
+          );
         }
       } else {
-        localStorage.inclusiveSetItem('assignments', jsonEncode([jsonEvent]));
+        localStorage.inclusiveSetItem(
+          'assignments',
+          jsonEncode([jsonEvent]),
+          context,
+        );
       }
     } catch (_) {
       // If anything goes wrong, reset storage to just this event
-      localStorage.inclusiveSetItem('assignments', jsonEncode([jsonEvent]));
+      localStorage.inclusiveSetItem(
+        'assignments',
+        jsonEncode([jsonEvent]),
+        context,
+      );
     }
 
     setState(() {});
@@ -417,7 +435,7 @@ class _CalendarWidgetState extends State<CalendarWidget> {
               ),
               if (description.isNotEmpty) ...[
                 SizedBox(height: 8),
-                Text((description)),
+                Text(stripHtml(description)),
               ],
               if (htmlUrl != null && htmlUrl.isNotEmpty) ...[
                 SizedBox(height: 8),

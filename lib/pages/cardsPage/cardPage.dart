@@ -31,7 +31,8 @@ class CardData {
 
 Future<List<dynamic>> fetchData() async {
   final url = Uri.parse(
-      '${localStorage.getItem('canvasDomain')}/api/v1/courses?include[]=&state[]=available');
+    '${localStorage.getItem('canvasDomain')}/api/v1/courses?include[]=&state[]=available',
+  );
   print(url);
 
   final headers = {
@@ -55,8 +56,12 @@ Future<List<dynamic>> fetchData() async {
   }
 }
 
-Widget cardCarouselWidget(String frontText, String backText,
-    BuildContext context, List<dynamic> data) {
+Widget cardCarouselWidget(
+  String frontText,
+  String backText,
+  BuildContext context,
+  List<dynamic> data,
+) {
   final ColorScheme colorScheme = Theme.of(context).colorScheme;
 
   final cardFlipper = FlipCardController();
@@ -67,67 +72,63 @@ Widget cardCarouselWidget(String frontText, String backText,
       child: Padding(
         padding: const EdgeInsets.all(8.0),
         child: FlipCard(
-            onTapFlipping: true,
-            controller: cardFlipper,
-            frontWidget: Center(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: colorScheme.surfaceContainer,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                width: mediaQuery.size.width / 3,
-                height: mediaQuery.size.height / 3,
-                child: Center(
-                  child: Text(
-                    frontText,
-                    style: TextStyle(
-                      color: colorScheme.onSurface,
-                      fontSize: 25,
-                      fontWeight: FontWeight.w300,
-                    ),
+          onTapFlipping: true,
+          controller: cardFlipper,
+          frontWidget: Center(
+            child: Container(
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainer,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              width: mediaQuery.size.width / 3,
+              height: mediaQuery.size.height / 3,
+              child: Center(
+                child: Text(
+                  frontText,
+                  style: TextStyle(
+                    color: colorScheme.onSurface,
+                    fontSize: 25,
+                    fontWeight: FontWeight.w300,
                   ),
                 ),
               ),
             ),
-            backWidget: Center(
-              child: Container(
-                width: mediaQuery.size.width / 3,
-                height: mediaQuery.size.height / 3,
-                decoration: BoxDecoration(
-                  color: colorScheme.surfaceContainer,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Center(
-                  child: Text(
-                    backText,
-                    style: TextStyle(
-                      color: colorScheme.onSurface,
-                      fontSize: 25,
-                      fontWeight: FontWeight.w300,
-                    ),
+          ),
+          backWidget: Center(
+            child: Container(
+              width: mediaQuery.size.width / 3,
+              height: mediaQuery.size.height / 3,
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainer,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Center(
+                child: Text(
+                  backText,
+                  style: TextStyle(
+                    color: colorScheme.onSurface,
+                    fontSize: 25,
+                    fontWeight: FontWeight.w300,
                   ),
                 ),
               ),
             ),
-            rotateSide: RotateSide.right),
+          ),
+          rotateSide: RotateSide.right,
+        ),
       ),
     );
   }
 
   return Scaffold(
-    appBar: AppBar(
-      title: const Text("FlipCards"),
-    ),
+    appBar: AppBar(title: const Text("FlipCards")),
     body: Padding(
       padding: const EdgeInsets.all(8.0),
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         itemCount: data.length,
-        itemBuilder: (context, index) => cardWidget(
-          frontText,
-          backText,
-          context,
-        ),
+        itemBuilder: (context, index) =>
+            cardWidget(frontText, backText, context),
       ),
     ),
   );
