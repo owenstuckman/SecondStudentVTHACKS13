@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:calendar_view/calendar_view.dart';
+import 'package:localstorage/localstorage.dart';
 import 'package:secondstudent/globals/static/custom_widgets/styled_button.dart';
 import 'package:secondstudent/globals/static/types/assignment.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class CalendarWidget extends StatefulWidget {
   final String description;
@@ -54,6 +57,26 @@ class _CalendarWidgetState extends State<CalendarWidget> {
     _descriptionController.dispose();
     _eventController.dispose();
     super.dispose();
+  }
+
+  Future<List<dynamic>> fetchData() async {
+    final url = Uri.parse(
+        '${localStorage.getItem('canvasDomain')}/api/v1/courses?include[]=&state[]=available');
+
+    final headers = {
+      'Authorization': 'Bearer ${localStorage.getItem('canvasToken')}',
+    };
+
+    try {
+      final response = await http.get(url, headers: headers);
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      return [];
+    } catch (e) {
+      return [];
+    }
   }
 
   Widget _headerBuilder(DateTime date) {

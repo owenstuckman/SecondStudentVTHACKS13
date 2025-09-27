@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:localstorage/localstorage.dart';
 import 'package:secondstudent/globals/auth_service.dart';
+import 'package:secondstudent/pages/cardsPage/cardPage.dart';
 import 'dart:async';
 
 // pages
@@ -62,7 +63,7 @@ class MyApp extends StatelessWidget {
           theme: Themes.themeData[snapshot.data?.data['theme']] ??
               Themes.themeData['Scarlet'],
           //Loading screen; processes auth
-          home: const SplashPage(),
+          home: const CardPage(),
           debugShowCheckedModeBanner: false,
         );
       },
