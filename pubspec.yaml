@@ -61,6 +61,7 @@ dependencies:
   filesystem_picker: ^4.1.0
   sanitize_html: ^2.1.0
   pdfx: ^2.5.0   
+  dart_eval: ^0.8.2
 
 dev_dependencies:
   flutter_test:

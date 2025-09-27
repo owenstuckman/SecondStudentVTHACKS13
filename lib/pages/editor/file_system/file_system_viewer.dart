@@ -1,9 +1,11 @@
 // lib/file_system_viewer.dart
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // Shortcuts/Actions/Intents, LogicalKeyboardKey
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
 
 typedef FileSelected = void Function(File file);
 typedef FileRenamed = void Function(File oldFile, File newFile);
@@ -35,9 +37,6 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
     super.initState();
     _loadRoot();
   }
-
-  // lib/pages/editor/file_system_viewer.dart
-  // (keep your imports)
 
   Future<void> _loadRoot() async {
     setState(() => _loadingRoot = true);
@@ -90,11 +89,14 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
     }
 
     try {
-      final kids = dir.listSync(followLinks: false).where((e) {
-        final base = _nameOf(e.path);
-        if (!widget.showHidden && _isHidden(base)) return false;
-        return true;
-      }).toList();
+      final kids = dir
+          .listSync(followLinks: false)
+          .where((e) {
+            final base = _nameOf(e.path);
+            if (!widget.showHidden && _isHidden(base)) return false;
+            return true;
+          })
+          .toList();
 
       kids.sort((a, b) {
         final aIsDir = FileSystemEntity.isDirectorySync(a.path);
@@ -118,9 +120,10 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
   }
 
   String _normalize(String p) {
-    return File(
-      p,
-    ).absolute.path.replaceAll(RegExp(r'[\\/]+'), Platform.pathSeparator);
+    return File(p).absolute.path.replaceAll(
+          RegExp(r'[\\/]+'),
+          Platform.pathSeparator,
+        );
   }
 
   Future<void> _toggleExpand(String dirPath) async {
@@ -151,6 +154,7 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
           "insert": "Sample\n",
           "attributes": {"header": 1},
         },
+        {"insert": "\n"}
       ];
 
       // Write as proper JSON
@@ -166,9 +170,8 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to create file: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Failed to create file: $e')));
     }
   }
 
@@ -272,10 +275,26 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
       widget.onFileRenamed?.call(file, renamed);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to rename: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Failed to rename: $e')));
     }
+  }
+
+  /// Prevent Enter / Space from activating ListTile (opening/closing) via keyboard.
+  Widget _noEnterSpaceActivation(Widget child) {
+    return Shortcuts(
+      shortcuts: {
+        LogicalKeySet(LogicalKeyboardKey.enter): const DoNothingIntent(),
+        LogicalKeySet(LogicalKeyboardKey.numpadEnter): const DoNothingIntent(),
+        LogicalKeySet(LogicalKeyboardKey.space): const DoNothingIntent(),
+      },
+      child: Actions(
+        actions: {
+          ActivateIntent: DoNothingAction(),
+        },
+        child: child,
+      ),
+    );
   }
 
   Widget _buildDirTile(String dirPath, {int depth = 0}) {
@@ -285,32 +304,33 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
 
     return Column(
       children: [
-        ListTile(
-          dense: true,
-          leading: Icon(expanded ? Icons.folder_open : Icons.folder),
-          title: Text(
-            name.isEmpty ? dirPath : name,
-            overflow: TextOverflow.ellipsis,
+        _noEnterSpaceActivation(
+          ListTile(
+            dense: true,
+            leading: Icon(expanded ? Icons.folder_open : Icons.folder),
+            title: Text(
+              name.isEmpty ? dirPath : name,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle:
+                depth == 0 ? Text(dirPath, overflow: TextOverflow.ellipsis) : null,
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  tooltip: 'New JSON here',
+                  icon: const Icon(Icons.note_add_outlined),
+                  onPressed: () => _createBlankJsonAt(dirPath),
+                ),
+                IconButton(
+                  tooltip: expanded ? 'Collapse' : 'Expand',
+                  icon: Icon(expanded ? Icons.expand_less : Icons.expand_more),
+                  onPressed: () => _toggleExpand(dirPath),
+                ),
+              ],
+            ),
+            onTap: () => _toggleExpand(dirPath), // mouse/touch still works
           ),
-          subtitle: depth == 0
-              ? Text(dirPath, overflow: TextOverflow.ellipsis)
-              : null,
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                tooltip: 'New JSON here',
-                icon: const Icon(Icons.note_add_outlined),
-                onPressed: () => _createBlankJsonAt(dirPath),
-              ),
-              IconButton(
-                tooltip: expanded ? 'Collapse' : 'Expand',
-                icon: Icon(expanded ? Icons.expand_less : Icons.expand_more),
-                onPressed: () => _toggleExpand(dirPath),
-              ),
-            ],
-          ),
-          onTap: () => _toggleExpand(dirPath),
         ),
         if (expanded)
           Padding(
@@ -336,23 +356,25 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
     final isJson = _isJson(file);
     final name = _nameOf(file.path);
 
-    return ListTile(
-      dense: true,
-      leading: Icon(isJson ? Icons.description : Icons.insert_drive_file),
-      title: Text(name, overflow: TextOverflow.ellipsis),
-      subtitle: Text(file.path, maxLines: 1, overflow: TextOverflow.ellipsis),
-      onTap: isJson ? () => widget.onFileSelected(file) : null,
-      enabled: isJson,
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (isJson)
-            IconButton(
-              tooltip: 'Rename',
-              icon: const Icon(Icons.drive_file_rename_outline),
-              onPressed: () => _renameFile(file),
-            ),
-        ],
+    return _noEnterSpaceActivation(
+      ListTile(
+        dense: true,
+        leading: Icon(isJson ? Icons.description : Icons.insert_drive_file),
+        title: Text(name, overflow: TextOverflow.ellipsis),
+        subtitle: Text(file.path, maxLines: 1, overflow: TextOverflow.ellipsis),
+        onTap: isJson ? () => widget.onFileSelected(file) : null,
+        enabled: isJson,
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isJson)
+              IconButton(
+                tooltip: 'Rename',
+                icon: const Icon(Icons.drive_file_rename_outline),
+                onPressed: () => _renameFile(file),
+              ),
+          ],
+        ),
       ),
     );
   }

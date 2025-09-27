@@ -3,7 +3,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -24,6 +23,7 @@ import '../slash_menu/slash_menu.dart';
 import '../slash_menu/slash_menu_action.dart';
 import '../slash_menu/custom_slash_menu_items.dart';
 import '../slash_menu/default_slash_menu_items.dart';
+import 'receive_blocks.dart';
 
 import '../template.dart';
 
@@ -449,39 +449,21 @@ class _EditorScreenState extends State<EditorScreen> {
           );
         });
         break;
+    if (!selection.isValid) {
+      _closeSlashMenu();
+      return;
     }
 
-    _closeSlashMenu();
-  }
+    // Execute the action if it exists in the map, passing the controller
+    if (ReceiveBlocks().actionMap.containsKey(action)) {
+      await ReceiveBlocks().actionMap[action]!(
+        context,
+        _controller,
+      ); // Pass the controller to the action
+    }
 
-  Future<String?> _promptForUrl(
-    BuildContext context, {
-    required String label,
-  }) async {
-    final controller = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          title: Text(label),
-          content: TextField(
-            controller: controller,
-            decoration: const InputDecoration(hintText: 'https://...'),
-            autofocus: true,
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(null),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
-              child: const Text('Insert'),
-            ),
-          ],
-        );
-      },
-    );
+    // ensure to check the case switch
+    _closeSlashMenu();
   }
 
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent e) {
