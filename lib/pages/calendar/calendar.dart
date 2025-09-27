@@ -1,17 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:calendar_view/calendar_view.dart';
+import 'package:secondstudent/widgets/calendarWidget.dart';
 
 class Calendar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Sample Text Page'),
+        title: Text('Calendar'),
       ),
       body: Center(
-        child: Text(
-          'This is a sample text.',
-          style: TextStyle(fontSize: 24),
-        ),
+        child: CalendarWidget("Test", "month"),
       ),
     );
   }
