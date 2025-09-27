@@ -3,7 +3,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -21,6 +20,7 @@ import '../slash_menu/slash_menu.dart';
 import '../slash_menu/slash_menu_action.dart';
 import '../slash_menu/custom_slash_menu_items.dart';
 import '../slash_menu/default_slash_menu_items.dart';
+import 'receive_blocks.dart';
 
 import '../template.dart';
 
@@ -308,143 +308,18 @@ class _EditorScreenState extends State<EditorScreen> {
       );
     }
 
-    switch (action) {
-      case SlashMenuAction.paragraph:
-        _controller.formatSelection(quill.Attribute.header);
-        _controller.formatSelection(quill.Attribute.list);
-        break;
-      case SlashMenuAction.heading1:
-        _controller.formatSelection(quill.Attribute.h1);
-        break;
-      case SlashMenuAction.heading2:
-        _controller.formatSelection(quill.Attribute.h2);
-        break;
-      case SlashMenuAction.heading3:
-        _controller.formatSelection(quill.Attribute.h3);
-        break;
-      case SlashMenuAction.bulletList:
-        _controller.formatSelection(quill.Attribute.ul);
-        break;
-      case SlashMenuAction.numberedList:
-        _controller.formatSelection(quill.Attribute.ol);
-        break;
-      case SlashMenuAction.toDoList:
-        _controller.formatSelection(quill.Attribute.unchecked);
-        break;
-      case SlashMenuAction.divider:
-        final int index = _controller.selection.baseOffset;
-        _controller.replaceText(
-          index,
-          0,
-          '\n---\n',
-          const TextSelection.collapsed(offset: 0),
-        );
-        break;
-      case SlashMenuAction.codeBlock:
-        _controller.formatSelection(quill.Attribute.codeBlock);
-        break;
-
-      case SlashMenuAction.addEditNote:
-        await cb.addEditNote(
-          context,
-          controller: _controller,
-          document: _controller.document,
-          existingOffset: _controller.selection.isValid
-              ? _controller.selection.start
-              : null,
-        );
-        break;
-
-      case SlashMenuAction.image:
-        _promptForUrl(context, label: 'Image URL').then((url) {
-          if (url == null || url.isEmpty) return;
-          final idx = _controller.selection.baseOffset;
-          _controller.replaceText(
-            idx,
-            0,
-            quill.BlockEmbed.image(url),
-            const TextSelection.collapsed(offset: 0),
-          );
-        });
-        break;
-
-      case SlashMenuAction.video:
-        _promptForUrl(context, label: 'Video URL').then((url) {
-          if (url == null || url.isEmpty) return;
-          final idx = _controller.selection.baseOffset;
-          _controller.replaceText(
-            idx,
-            0,
-            quill.BlockEmbed.video(url),
-            const TextSelection.collapsed(offset: 0),
-          );
-        });
-        break;
-
-      case SlashMenuAction.iframeExcalidraw:
-        _promptForUrl(context, label: 'Excalidraw room/share URL').then((url) {
-          if (url == null || url.isEmpty) return;
-          cb.insertIframe(
-            _controller,
-            url,
-            height: 560,
-          ); // helper normalizes & inserts
-        });
-        break;
-
-      case SlashMenuAction.iframeGoogleDoc:
-        _promptForUrl(
-          context,
-          label: 'Google Doc (published) or Drive preview URL',
-        ).then((url) {
-          if (url == null || url.isEmpty) return;
-          final normalized = cb.normalizeGoogle(url);
-          if (normalized == null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  'Use a published-to-web or /preview Google link.',
-                ),
-              ),
-            );
-            return;
-          }
-          cb.insertIframe(_controller, normalized, height: 560);
-        });
-        break;
+    if (!selection.isValid) {
+      _closeSlashMenu();
+      return;
     }
 
-    _closeSlashMenu();
-  }
+    // Execute the action if it exists in the map, passing the controller
+    if (ReceiveBlocks().actionMap.containsKey(action)) {
+      await ReceiveBlocks().actionMap[action]!(context, _controller); // Pass the controller to the action
+    }
 
-  Future<String?> _promptForUrl(
-    BuildContext context, {
-    required String label,
-  }) async {
-    final controller = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          title: Text(label),
-          content: TextField(
-            controller: controller,
-            decoration: const InputDecoration(hintText: 'https://...'),
-            autofocus: true,
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(null),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
-              child: const Text('Insert'),
-            ),
-          ],
-        );
-      },
-    );
+    // ensure to check the case switch
+    _closeSlashMenu();
   }
 
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent e) {
