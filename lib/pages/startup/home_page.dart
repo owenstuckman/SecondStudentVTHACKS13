@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:secondstudent/globals/auth_service.dart';
 import 'package:secondstudent/globals/tutorial_system.dart';
 import 'package:secondstudent/globals/static/extensions/widget_extension.dart';
+import 'package:secondstudent/pages/classes/classes.dart';
 import 'package:secondstudent/pages/startup/welcome_page.dart';
 
 // pages
@@ -80,6 +81,12 @@ class HomePageState extends State<HomePage> {
       filled: Icons.check_box,
       outlined: Icons.check_box_outlined,
       label: 'To-Do',
+      lock: false,
+    ),
+    _NavItem(
+      filled: Icons.school,
+      outlined: Icons.school_outlined,
+      label: 'Classes',
       lock: false,
     ),
   ];
@@ -183,7 +190,7 @@ class HomePageState extends State<HomePage> {
                   controller: _pageController,
                   onPageChanged: (index) => setState(() => pageIndex = index),
                   // ORDER must match _navItems above
-                  children: [EditorWorkspace(), Calendar(), ToDo()],
+                  children: [EditorWorkspace(), Calendar(), ToDo(), Classes()],
                 ),
               ),
             ],
