@@ -14,7 +14,7 @@ extension WidgetExtension on Widget {
   /// [EdgeInsets padding = EdgeInsets.zero]: Padding from edges of Expanded <p>
   Widget expandedFit(
       {Alignment alignment = Alignment.center,
-        EdgeInsets padding = EdgeInsets.zero}) {
+      EdgeInsets padding = EdgeInsets.zero}) {
     // Returns child wrapped in FittedBox w/ padding wrapped in Expanded
     return Expanded(
         child: Container(
@@ -31,8 +31,9 @@ extension WidgetExtension on Widget {
 
   /// Widget extension <p>
   /// Returns this widget wrapped in a ClipRRECT Widget.
-  Widget clip({BorderRadius borderRadius = BorderRadius.zero}){
-    return ClipRRect(borderRadius: borderRadius, clipBehavior: Clip.hardEdge, child: this);
+  Widget clip({BorderRadius borderRadius = BorderRadius.zero}) {
+    return ClipRRect(
+        borderRadius: borderRadius, clipBehavior: Clip.hardEdge, child: this);
   }
 
   /// Widget extension <p>
