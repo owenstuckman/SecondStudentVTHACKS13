@@ -26,6 +26,9 @@ class CustomSlashMenuItems {
     ),
   ];
 
+  // Getter for items
+  List<SlashMenuItemData> get items => _items;
+
   // Method to update items asynchronously
   void _updateItems(Function callback) {
     supabase.from('blocks').select().then((res) {
@@ -46,7 +49,9 @@ class CustomSlashMenuItems {
 
   // Method to retrieve the items and trigger update
   void fetchItems(Function callback) {
-    _updateItems(callback); // Run async function to update items
+    _updateItems(() {
+      callback(); // Call the callback function after items are updated
+    });
   }
 
   // Method to add a new item

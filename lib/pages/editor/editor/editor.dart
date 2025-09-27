@@ -315,7 +315,10 @@ class _EditorScreenState extends State<EditorScreen> {
 
     // Execute the action if it exists in the map, passing the controller
     if (ReceiveBlocks().actionMap.containsKey(action)) {
-      await ReceiveBlocks().actionMap[action]!(context, _controller); // Pass the controller to the action
+      await ReceiveBlocks().actionMap[action]!(
+        context,
+        _controller,
+      ); // Pass the controller to the action
     }
 
     // ensure to check the case switch
