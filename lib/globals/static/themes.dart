@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:secondstudent/globals/account_service.dart';
 
 
 /*
@@ -9,9 +10,16 @@ Allows for changing color scheme
 Can always be expanded on
 
  */
+
 class Themes {
 
-  static ThemeData sparkliTheme = ThemeData(
+  static void checkTheme() {
+    if (!themeData.keys.contains(AccountService.account['theme'])) {
+      AccountService.account['theme'] = themeData.keys.first;
+    }
+  }
+
+  static final ThemeData sparkliTheme = ThemeData(
     colorScheme: const ColorScheme(
       primary: Color(0xFFE53D2E),
       onPrimary: Color(0xFFFFFFFF),

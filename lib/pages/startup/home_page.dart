@@ -12,6 +12,7 @@ import '../settings/settings.dart';
 import '../../globals/static/custom_widgets/swipe_page_route.dart';
 import '../../../editor.dart';
 import 'package:secondstudent/globals/static/custom_widgets/logo.dart';
+import 'package:secondstudent/globals/stream_signal.dart';
 
 /*
 Home Page Class
@@ -23,6 +24,10 @@ Home Page Class
 
 class HomePage extends StatefulWidget {
   HomePage({Key? key});
+
+  //Stream controller for home page
+  static StreamController<StreamSignal> homePageStream =
+      StreamController<StreamSignal>();
 
   @override
   State<HomePage> createState() => HomePageState();
@@ -54,6 +59,9 @@ class HomePageState extends State<HomePage> {
     //Colorscheme of build context
     final ColorScheme colorScheme = Theme.of(context).colorScheme;
 
+    //Resets home stream controller
+    HomePage.homePageStream = StreamController();
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (pageIndex == 2) {
         if (creationTutorial.run(context, false)) {
@@ -67,58 +75,63 @@ class HomePageState extends State<HomePage> {
     });
 
     //Returns scaffold which refreshes on stream update
-    return Scaffold(
-      body: PageView(
-        //If on map or shop page, cannot scroll so that applications absorb gestures
-        physics: pageIndex == 0 || pageIndex == 3
-            ? const NeverScrollableScrollPhysics()
-            : const ClampingScrollPhysics(parent: PageScrollPhysics()),
-        controller: _pageController,
-        //On page change, reset navbar index
-        onPageChanged: (index) {
-          setState(() {
-            pageIndex = index;
-          });
-        },
-        //List of all active pages
-        children: [EditorScreen(), Account()],
-      ),
-      //Top Bar
-      appBar: AppBar(
-        centerTitle: true,
-        forceMaterialTransparency: true,
-        //Elevated for shadow
-        elevation: 5,
-        backgroundColor: colorScheme.surfaceContainer,
-        shadowColor: colorScheme.shadow,
-        title: const Logo(),
-        leading: Container(),
-        actions: [
-          const SizedBox(width: 15),
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            constraints: BoxConstraints(maxWidth: pageIndex == 3 ? 65 : 0),
-            child: Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: IconButton(
-                onPressed: () {
-                  setState(() {
-                    context.pushSwipePage(Settings(), title: "Settings");
-                  });
-                },
-                icon: Icon(
-                  Icons.settings_outlined,
-                  color: Theme.of(context).colorScheme.onSurface,
-                  size: 30,
-                ),
-              ).clip(),
-            ),
+    return StreamBuilder<StreamSignal>(
+      stream: HomePage.homePageStream.stream,
+      builder: (context, snapshot) {
+        return Scaffold(
+          body: PageView(
+            //If on map or shop page, cannot scroll so that applications absorb gestures
+            physics: pageIndex == 0 || pageIndex == 3
+                ? const NeverScrollableScrollPhysics()
+                : const ClampingScrollPhysics(parent: PageScrollPhysics()),
+            controller: _pageController,
+            //On page change, reset navbar index
+            onPageChanged: (index) {
+              setState(() {
+                pageIndex = index;
+              });
+            },
+            //List of all active pages
+            children: [EditorScreen(), Account()],
           ),
-        ],
-      ),
-      backgroundColor: colorScheme.primaryContainer,
-      extendBody: true,
-      bottomNavigationBar: _buildNavBar(context),
+          //Top Bar
+          appBar: AppBar(
+            centerTitle: true,
+            forceMaterialTransparency: true,
+            //Elevated for shadow
+            elevation: 5,
+            backgroundColor: colorScheme.surfaceContainer,
+            shadowColor: colorScheme.shadow,
+            title: const Logo(),
+            leading: Container(),
+            actions: [
+              const SizedBox(width: 15),
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                constraints: BoxConstraints(maxWidth: pageIndex == 3 ? 65 : 0),
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: IconButton(
+                    onPressed: () {
+                      setState(() {
+                        context.pushSwipePage(Settings(), title: "Settings");
+                      });
+                    },
+                    icon: Icon(
+                      Icons.settings_outlined,
+                      color: Theme.of(context).colorScheme.onSurface,
+                      size: 30,
+                    ),
+                  ).clip(),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: colorScheme.primaryContainer,
+          extendBody: true,
+          bottomNavigationBar: _buildNavBar(context),
+        );
+      },
     );
   }
 
