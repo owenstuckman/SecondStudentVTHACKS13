@@ -137,6 +137,7 @@ class _SlashMenuState extends State<SlashMenu> {
                     maxHeight: maxListHeight,
                   ),
                   child: Scrollbar(
+                    controller: _scrollController,
                     thumbVisibility:
                         widget.items.length > widget.maxVisibleRows,
                     child: ListView.builder(
