@@ -8,6 +8,8 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:secondstudent/globals/static/extensions/local-storage-wrap.dart';
 import 'package:secondstudent/globals/static/extensions/canvasFullQuery.dart';
+import 'package:flutter_widget_from_html/flutter_widget_from_html.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class CalendarWidget extends StatefulWidget {
   final String description;
@@ -382,7 +384,15 @@ class _CalendarWidgetState extends State<CalendarWidget> {
               ),
               if (description.isNotEmpty) ...[
                 SizedBox(height: 8),
-                Text(stripHtml(description)),
+                HtmlWidget(
+                  description,
+                  onTapUrl: (url) async {
+                    return await launchUrl(
+                      Uri.parse(url),
+                      mode: LaunchMode.externalApplication,
+                    );
+                  },
+                ),
               ],
               if (htmlUrl != null && htmlUrl.isNotEmpty) ...[
                 SizedBox(height: 8),
