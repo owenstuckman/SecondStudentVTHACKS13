@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:secondstudent/pages/editor/editor/editor.dart';
+import 'package:flutter_quill_extensions/flutter_quill_extensions.dart';
 
 class RemoteEditorPage extends StatefulWidget {
   final String fileUrl;
