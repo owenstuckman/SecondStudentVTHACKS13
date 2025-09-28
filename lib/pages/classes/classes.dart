@@ -20,7 +20,6 @@ class Classes extends StatefulWidget {
 }
 
 class _ClassesState extends State<Classes> {
-  final GlobalKey _editorKey = GlobalKey();
   List<dynamic> courses = [];
   @override
   void initState() {

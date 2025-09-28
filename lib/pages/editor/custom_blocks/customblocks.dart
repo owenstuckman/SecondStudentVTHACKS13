@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
+import 'package:secondstudent/pages/editor/custom_blocks/iframe_block.dart';
+
 
 /// ==== Custom "notes" block embed ===========================================
 class NotesBlockEmbed extends CustomBlockEmbed {
@@ -159,6 +161,10 @@ class CustomBlocks {
     );
   }
 
+
+
+  
+
   // Excalidraw and Google doc helpers
   String normalizeExcalidraw(String url) {
     // Accepts app.excalidraw.com links. If user pasted plain excalidraw.com, fix host.
@@ -198,58 +204,67 @@ class CustomBlocks {
   }
 
   void insertIframe(
-    quill.QuillController controller,
-    String url, {
-    double height = 420,
-    bool addTrailingNewline = true,
-  }) {}
+  quill.QuillController controller,
+  String url, {
+  double height = 420,
+  bool addTrailingNewline = true,
+}) {
+  final normalizedUrl = _normalizeUrlForEmbedding(url);
+  final embed = quill.BlockEmbed.custom(
+    IframeBlockEmbed(url: normalizedUrl, height: height),
+  );
 
-  /// Convert common share links to proper embeddable URLs.
-  /// Uses your existing helpers where possible (normalizeGoogle/normalizeExcalidraw).
-  String _toEmbeddableUrl(String raw) {
-    final u = Uri.tryParse(raw);
-    if (u == null) return raw;
+  final doc = controller.document;
+  final sel = controller.selection;
+  if (!sel.isValid) return;
 
-    // Prefer your existing normalizers if you already implemented them:
-    final g = normalizeGoogle(
-      raw,
-    ); // returns /preview links for Docs/Drive or null
-    if (g != null) return g;
+  // Where to insert
+  int insertAt = sel.baseOffset.clamp(0, doc.length);
 
-    final ex = normalizeExcalidraw(raw); // ensures ?embed=1 for Excalidraw
-    if (ex != raw) return ex;
+  // Peek around the caret to decide if we need line breaks
+  final plain = doc.toPlainText();
+  final beforeChar = insertAt > 0 ? plain[insertAt - 1] : '\n';
+  final afterChar  = insertAt < plain.length ? plain[insertAt] : '\n';
 
-    // YouTube: watch/shorts/share -> /embed/ID
-    if (u.host.contains('youtube.com') ||
-        u.host == 'youtu.be' ||
-        u.host == 'www.youtu.be') {
-      String? id;
-      if (u.host.contains('youtube.com')) {
-        id = u.queryParameters['v'];
-        if (id == null && u.pathSegments.contains('shorts')) {
-          final i = u.pathSegments.indexOf('shorts');
-          if (i >= 0 && i + 1 < u.pathSegments.length)
-            id = u.pathSegments[i + 1];
-        }
-        if (u.pathSegments.contains('embed')) return raw; // already embeddable
-      } else if (u.pathSegments.isNotEmpty) {
-        id = u.pathSegments.first; // youtu.be/{id}
-      }
-      if (id != null && id.isNotEmpty) {
-        return 'https://www.youtube.com/embed/$id';
-      }
-    }
+  final needsLeadingNL  = beforeChar != '\n';
+  final needsTrailingNL = afterChar  != '\n';
 
-    // Vimeo: vimeo.com/{id} -> player.vimeo.com/video/{id}
-    if (u.host.contains('vimeo.com') && !u.host.contains('player.')) {
-      final segs = u.pathSegments.where((s) => s.isNotEmpty).toList();
-      final id = segs.isNotEmpty ? segs.last : null;
-      if (id != null && int.tryParse(id) != null) {
-        return 'https://player.vimeo.com/video/$id';
-      }
-    }
+  // Leading newline (so the embed is on its own line)
+  if (needsLeadingNL) {
+    controller.replaceText(
+      insertAt,
+      0,
+      '\n',
+      TextSelection.collapsed(offset: insertAt + 1),
+    );
+    insertAt += 1;
+  }
 
-    // Default: return as-is (host must allow iframing)
-    return raw;
+  // Insert the embed
+  controller.replaceText(
+    insertAt,
+    0,
+    embed,
+    TextSelection.collapsed(offset: insertAt + 1),
+  );
+  insertAt += 1;
+
+  // Trailing newline so the caret lands under the block
+  if (addTrailingNewline && needsTrailingNL) {
+    controller.replaceText(
+      insertAt,
+      0,
+      '\n',
+      TextSelection.collapsed(offset: insertAt + 1),
+    );
+  }
+}
+
+
+  /// Use the builder's URL normalization logic instead of duplicating it
+  String _normalizeUrlForEmbedding(String raw) {
+    // Create a temporary builder instance to access its URL normalization logic
+    const builder = IframeEmbedBuilder();
+    return builder.toEmbeddableUrl(raw);
   }
 }

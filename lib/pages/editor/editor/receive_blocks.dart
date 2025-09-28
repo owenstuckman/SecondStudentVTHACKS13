@@ -126,16 +126,16 @@ class ReceiveBlocks {
       });
     },
 
-    SlashMenuAction.iframeExcalidraw: (context, controller) {
-      _promptForUrl(context, label: 'Excalidraw room/share URL').then((url) {
-        if (url == null || url.isEmpty) return;
-        cb.insertIframe(
-          controller,
-          url,
-          height: 560, // helper normalizes & inserts
-        );
-      });
-    },
+    // SlashMenuAction.iframeExcalidraw: (context, controller) {
+    //   _promptForUrl(context, label: 'Excalidraw room/share URL').then((url) {
+    //     if (url == null || url.isEmpty) return;
+    //     cb.insertIframe(
+    //       controller,
+    //       url,
+    //       height: 560, // helper normalizes & inserts
+    //     );
+    //   });
+    // },
 
     SlashMenuAction.iframeGoogleDoc: (context, controller) {
       _promptForUrl(

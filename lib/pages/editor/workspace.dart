@@ -206,7 +206,10 @@ class _EditorWorkspaceState extends State<EditorWorkspace> {
               fit: StackFit.expand,
               children: [
                 // Editor stays alive even while a PDF is shown
-                EditorScreen(key: _editorKey),
+                EditorScreen(
+                  key: _editorKey,
+                  onFileSelected: _onFileSelected,
+                ),
 
                 // Initial hint overlay if nothing selected (optional)
                 if (_currentFile == null)

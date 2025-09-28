@@ -17,6 +17,7 @@ enum SlashMenuAction {
   iframeGoogleDoc,
   pageLink,
   embedPdf,
+  table,
 }
 
 // Combine default actions with fetched extras
@@ -36,7 +37,7 @@ Future<List<SlashMenuAction>> fetchActionEnum() async {
     try {
       actions.add(SlashMenuAction.values.byName(name));
     } catch (_) {
-      print('fetchCombinedActions: unknown action "$name"');
+      ('fetchCombinedActions: unknown action "$name"');
     }
   }
 

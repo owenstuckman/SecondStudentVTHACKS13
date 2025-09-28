@@ -11,7 +11,7 @@ import 'package:pdfx/pdfx.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
 // Conditional import: real <iframe> on web, stub elsewhere
-import 'iframe_html_view_stub.dart'
+import 'iframe_webview.dart'
   if (dart.library.html) 'iframe_html_view_web.dart';
 
 /// ==== Embed payload ==========================================================
@@ -112,7 +112,7 @@ class PdfEmbedBuilder implements EmbedBuilder {
         final viewer = _buildWebIFrame(url, height);
         return EmbedProxy(
           Listener(
-            behavior: HitTestBehavior.opaque,
+            behavior: HitTestBehavior.translucent,
             onPointerDown: (_) => FocusScope.of(context).unfocus(),
             child: SizedBox(height: height, child: viewer),
           ),
@@ -122,7 +122,7 @@ class PdfEmbedBuilder implements EmbedBuilder {
       // On native we render pages with pdfx (zoom/pinch and controls).
       return EmbedProxy(
         GestureDetector(
-          behavior: HitTestBehavior.opaque,
+          behavior: HitTestBehavior.translucent,
           onTap: () => FocusScope.of(context).unfocus(),
           child: SizedBox(
             height: height,

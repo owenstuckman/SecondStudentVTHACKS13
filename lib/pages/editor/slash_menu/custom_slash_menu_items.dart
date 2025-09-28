@@ -35,7 +35,14 @@ class CustomSlashMenuItems {
       icon: Icons.picture_as_pdf_outlined,
       title: 'PDF',
       subtitle: 'PDF URL, data: URI, or assets/path.pdf',
-    )
+    ),
+    SlashMenuItemData(
+      action: SlashMenuAction.table,
+      icon: Icons.table_chart_outlined,
+      title: 'Table',
+      subtitle: 'Table block',
+    ),
+
   ];
 
   // Getter for items

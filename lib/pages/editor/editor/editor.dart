@@ -13,8 +13,12 @@ import 'package:url_launcher/url_launcher.dart';
 
 // Custom blocks: helpers (normalize/insert/addEditNote, Notes builder, etc.)
 import 'package:secondstudent/pages/editor/custom_blocks/customblocks.dart';
-import 'package:secondstudent/pages/editor/custom_blocks/page_link_service.dart';
 import 'package:secondstudent/pages/editor/custom_blocks/pdf_block.dart';
+import 'package:secondstudent/pages/editor/custom_blocks/page_link_block.dart';
+import 'package:secondstudent/pages/editor/custom_blocks/page_link_service.dart';
+import 'package:secondstudent/pages/editor/custom_blocks/readonly_block.dart';
+import 'package:secondstudent/pages/editor/custom_blocks/table_block.dart';
+import 'package:secondstudent/pages/editor/editor/table_editor.dart';
 
 // Iframe builder lives here (per your note)
 import 'package:secondstudent/pages/editor/custom_blocks/iframe_block.dart';
@@ -28,7 +32,12 @@ import 'receive_blocks.dart';
 import '../template.dart';
 
 class EditorScreen extends StatefulWidget {
-  const EditorScreen({super.key});
+  const EditorScreen({
+    super.key,
+    this.onFileSelected,
+  });
+
+  final Future<void> Function(File file)? onFileSelected;
 
   @override
   State<EditorScreen> createState() => _EditorScreenState();
@@ -220,6 +229,12 @@ class _EditorScreenState extends State<EditorScreen> {
     );
   }
 
+  /// Helper method to open a JSON file into the editor
+  Future<void> _openJsonIntoEditor(String absPath) async {
+    final json = await File(absPath).readAsString();
+    loadFromJsonString(json, sourcePath: absPath);
+  }
+
   // ---------------- Slash menu helpers ----------------
 
   List<SlashMenuItemData> get _filteredSlashItems {
@@ -381,9 +396,14 @@ class _EditorScreenState extends State<EditorScreen> {
         break;
 
       case SlashMenuAction.pageLink:
-        await PageLinkService.insertPageLink(
+        await PageLinkBlock.insertAtSelection(
           context: context,
           controller: _controller,
+          pickJsonAbsolutePath: (ctx) async {
+            // Use the file picker from PageLinkService
+            final file = await PageLinkService.pickWorkspaceJson(ctx);
+            return file?.path;
+          },
         );
         break;
 
@@ -471,7 +491,38 @@ class _EditorScreenState extends State<EditorScreen> {
           );
         });
         break;
+    case SlashMenuAction.table:
+      final insertAt = _controller.selection.isValid
+          ? _controller.selection.start
+          : _controller.document.length;
+      final block = quill.BlockEmbed.custom(
+        TableBlockEmbed(
+          rows: const [
+            ['Header 1', 'Header 2'],
+            ['Row 1 Col 1', 'Row 1 Col 2'],
+          ],
+          headerRow: true,
+          colAlign: const ['left', 'center'],
+        ),
+      );
+      _controller.replaceText(
+        insertAt,
+        0,
+        block,
+        TextSelection.collapsed(offset: insertAt + 1),
+      );
+      _controller.replaceText(
+        insertAt + 1,
+        0,
+        '\n',
+        TextSelection.collapsed(offset: insertAt + 2),
+      );
+      break;
+
+
     }
+
+    
 
     // Execute the action if it exists in the map, passing the controller
     if (ReceiveBlocks().actionMap.containsKey(action)) {
@@ -570,27 +621,52 @@ class _EditorScreenState extends State<EditorScreen> {
                             (ctx, link, isReadOnly) async =>
                                 quill.LinkMenuAction.launch,
                         onLaunchUrl: (url) async {
-                          final handled = await PageLinkService.handleLaunchUrl(
-                            url,
-                            context: context,
-                            onOpenJson: (absPath) async {
-                              final json = await File(absPath).readAsString();
-                              loadFromJsonString(json, sourcePath: absPath);
-                            },
-                          );
-                          if (!handled) {
-                            final uri = Uri.tryParse(url);
-                            if (uri != null) {
-                              try {
-                                await launchUrl(
-                                  uri,
-                                  mode: LaunchMode.externalApplication,
-                                );
-                              } catch (_) {}
+                          // Handle file:// URLs for page links
+                          if (url.startsWith('file://')) {
+                            final rel = url.substring('file://'.length);
+                            final root = await Workspace.root();
+                            if (root != null && root.isNotEmpty) {
+                              final abs = Workspace.toAbsolute(root, rel);
+                              final file = File(abs);
+                              if (await file.exists()) {
+                                final json = await file.readAsString();
+                                loadFromJsonString(json, sourcePath: abs);
+                                return;
+                              }
                             }
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Page not found: $rel')),
+                            );
+                            return;
+                          }
+                          
+                          // Handle other URLs externally
+                          final uri = Uri.tryParse(url);
+                          if (uri != null) {
+                            try {
+                              await launchUrl(
+                                uri,
+                                mode: LaunchMode.externalApplication,
+                              );
+                            } catch (_) {}
                           }
                         },
-                        embedBuilders: [
+                          embedBuilders: [
+                            TableEmbedBuilder(
+                              onEdit: (context, {required nodeOffset, required currentRows, required headerRow, required colAlign}) => 
+                                editTableBlock(
+                                  context,
+                                  controller: _controller,
+                                  nodeOffset: nodeOffset,
+                                  currentRows: currentRows,
+                                  headerRow: headerRow,
+                                  colAlign: colAlign,
+                                ),
+                            ),
+                          PageLinkBlockBuilder(
+                            onOpenJson: _openJsonIntoEditor,
+                            onFileSelected: widget.onFileSelected,
+                          ),
                           const PdfEmbedBuilder(), 
                           const IframeEmbedBuilder(),
                           NotesEmbedBuilder(
