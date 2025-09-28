@@ -103,9 +103,9 @@ class HomePageState extends State<HomePage> {
 
   // Persistent drawer state & size
   bool _drawerOpen = true; // default to open
-  double _drawerWidth = 320; // default
-  static const double _minDrawerWidth = 260;
-  static const double _maxDrawerWidth = 520;
+  double _drawerWidth = 200; // default - made thinner
+  static const double _minDrawerWidth = 150;
+  static const double _maxDrawerWidth = 250;
   
   // GlobalKey to access EditorWorkspace methods
   final GlobalKey<EditorWorkspaceState> _editorWorkspaceKey = GlobalKey<EditorWorkspaceState>();

@@ -283,6 +283,96 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
     }
   }
 
+  Future<void> _renameFolder(Directory folder) async {
+    final dirPath = folder.parent.path;
+    if (!_isWithinRoot(dirPath)) return;
+
+    final oldName = _nameOf(folder.path);
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Rename Folder'),
+        content: TextField(
+          autofocus: true,
+          controller: TextEditingController(text: oldName),
+          decoration: const InputDecoration(
+            labelText: 'Folder name',
+            border: OutlineInputBorder(),
+          ),
+          onSubmitted: (value) => Navigator.of(ctx).pop(value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final controller = (ctx.widget as AlertDialog).content as TextField;
+              Navigator.of(ctx).pop(controller.controller?.text);
+            },
+            child: const Text('Rename'),
+          ),
+        ],
+      ),
+    );
+
+    if (newName == null || newName.trim().isEmpty || newName == oldName) return;
+
+    final finalName = newName.trim();
+    final newPath = '$dirPath${Platform.pathSeparator}$finalName';
+    final newFolder = Directory(newPath);
+
+    if (!_isWithinRoot(newPath)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cannot move outside the root folder')),
+      );
+      return;
+    }
+
+    if (await newFolder.exists()) {
+      final overwrite = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Folder exists'),
+          content: Text('Overwrite $finalName?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Overwrite'),
+            ),
+          ],
+        ),
+      );
+      if (overwrite != true) return;
+      await newFolder.delete(recursive: true);
+    }
+
+    try {
+      final renamed = await folder.rename(newPath);
+
+      // Refresh the parent dir listing
+      _childrenCache.remove(dirPath);
+      await _ensureChildrenLoaded(dirPath);
+      setState(() {});
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Renamed to ${_nameOf(renamed.path)}')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to rename folder: $e')));
+    }
+  }
+
   Future<void> _deleteFile(File file) async {
     final dirPath = File(file.path).parent.path;
     if (!_isWithinRoot(dirPath)) return;
@@ -515,6 +605,11 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      IconButton(
+                        tooltip: 'Rename Folder',
+                        icon: const Icon(Icons.drive_file_rename_outline),
+                        onPressed: () => _renameFolder(Directory(dirPath)),
+                      ),
                       IconButton(
                         tooltip: expanded ? 'Collapse' : 'Expand',
                         icon: Icon(expanded ? Icons.expand_less : Icons.expand_more),

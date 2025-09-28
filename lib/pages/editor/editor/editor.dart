@@ -70,6 +70,9 @@ class EditorScreenState extends State<EditorScreen> {
   bool _isSlashMenuOpen = false;
   String _slashQuery = '';
   final ValueNotifier<int> _slashSelectionIndex = ValueNotifier<int>(0);
+  
+  // Editor key for positioning
+  final GlobalKey _editorKey = GlobalKey();
 
   // Custom blocks facade
   final cb = CustomBlocks();
@@ -191,15 +194,6 @@ class EditorScreenState extends State<EditorScreen> {
   /// Save back to the current file path (set when opening from the file viewer).
   Future<void> saveToCurrentFile() async {
     if (_currentFilePath == null || _currentFilePath!.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'No file bound. Open a JSON file from the list first.',
-            ),
-          ),
-        );
-      }
       return;
     }
     try {
@@ -360,6 +354,20 @@ class EditorScreenState extends State<EditorScreen> {
     } else {
       _closeSlashMenu();
     }
+  }
+
+  Offset? _getCursorPosition() {
+    final renderBox = _editorKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return null;
+    
+    // Get the text position from the selection
+    final selection = _controller.selection;
+    if (!selection.isValid) return null;
+    
+    // For now, we'll use a simple approximation
+    // In a real implementation, you'd need to get the actual text position
+    // This is a simplified approach that positions the menu near the top-left
+    return const Offset(20, 20);
   }
 
   void _onSlashSelect(SlashMenuAction action) async {
@@ -617,6 +625,7 @@ class EditorScreenState extends State<EditorScreen> {
                 children: [
                   Positioned.fill(
                     child: quill.QuillEditor.basic(
+                      key: _editorKey,
                       controller: _controller,
                       config: quill.QuillEditorConfig(
                         showCursor: true,
@@ -708,16 +717,14 @@ class EditorScreenState extends State<EditorScreen> {
                   ),
 
                   if (_isSlashMenuOpen)
-                    Align(
-                      alignment: Alignment.bottomLeft,
-                      child: Padding(
-                        padding: const EdgeInsets.only(left: 4, bottom: 8),
-                        child: SlashMenu(
-                          items: filteredItems,
-                          selectionIndexListenable: _slashSelectionIndex,
-                          onSelect: _onSlashSelect,
-                          onDismiss: _closeSlashMenu,
-                        ),
+                    Positioned(
+                      left: 20,
+                      top: 20,
+                      child: SlashMenu(
+                        items: filteredItems,
+                        selectionIndexListenable: _slashSelectionIndex,
+                        onSelect: _onSlashSelect,
+                        onDismiss: _closeSlashMenu,
                       ),
                     ),
                 ],
