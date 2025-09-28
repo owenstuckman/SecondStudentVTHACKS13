@@ -10,9 +10,10 @@ import 'package:http/http.dart' as http;
 import 'package:pdfx/pdfx.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
-// Conditional import: real <iframe> on web, stub elsewhere
-import 'iframe_webview.dart'
-  if (dart.library.html) 'iframe_html_view_web.dart';
+// Import webview for all platforms
+import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_android/webview_flutter_android.dart';
+import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 
 /// ==== Embed payload ==========================================================
 /// Stores a URL (http/https, assets/, or data: URI), optional initial page, height.
@@ -138,8 +139,7 @@ class PdfEmbedBuilder implements EmbedBuilder {
   Widget _buildWebIFrame(String url, double height) {
     // Most browsers render PDFs inline if the server allows it.
     // If a host blocks inline PDFs (e.g., X-Frame-Options), the user can click "Open".
-    // Reuse your existing view-factory helper from the iframe block.
-    return buildHtmlIFrame(url, height);
+    return SizedBox(height: height, child: _UnifiedPdfViewer(url: url));
   }
 
   Widget _errorBox(BuildContext context, String msg) => Container(
@@ -317,4 +317,64 @@ class _LoadingOrError extends StatelessWidget {
           ],
         ),
       );
+}
+
+class _UnifiedPdfViewer extends StatefulWidget {
+  final String url;
+  
+  const _UnifiedPdfViewer({required this.url});
+
+  @override
+  State<_UnifiedPdfViewer> createState() => _UnifiedPdfViewerState();
+}
+
+class _UnifiedPdfViewerState extends State<_UnifiedPdfViewer> {
+  late final WebViewController controller;
+  bool isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _setupWebView();
+  }
+
+  void _setupWebView() {
+    late final PlatformWebViewControllerCreationParams params;
+    if (WebViewPlatform.instance is WebKitWebViewPlatform) {
+      params = WebKitWebViewControllerCreationParams(
+        allowsInlineMediaPlayback: true,
+        mediaTypesRequiringUserAction: const <PlaybackMediaTypes>{},
+      );
+    } else {
+      params = const PlatformWebViewControllerCreationParams();
+    }
+
+    controller = WebViewController.fromPlatformCreationParams(params)
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageStarted: (_) => setState(() => isLoading = true),
+          onPageFinished: (_) => setState(() => isLoading = false),
+          onWebResourceError: (e) => debugPrint('PDF Web error: ${e.description}'),
+        ),
+      )
+      ..loadRequest(Uri.parse(widget.url));
+
+    if (controller.platform is AndroidWebViewController) {
+      AndroidWebViewController.enableDebugging(true);
+      (controller.platform as AndroidWebViewController)
+          .setMediaPlaybackRequiresUserGesture(false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        WebViewWidget(controller: controller),
+        if (isLoading)
+          const Center(child: CircularProgressIndicator()),
+      ],
+    );
+  }
 }
