@@ -27,8 +27,7 @@ class _EditorWorkspaceState extends State<EditorWorkspace> {
 
   File? _currentFile;
   bool get _showingPdf =>
-      _currentFile != null &&
-      _currentFile!.path.toLowerCase().endsWith('.pdf');
+      _currentFile != null && _currentFile!.path.toLowerCase().endsWith('.pdf');
 
   @override
   void initState() {
@@ -73,8 +72,14 @@ class _EditorWorkspaceState extends State<EditorWorkspace> {
   Future<void> _restoreLayoutPrefs() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _leftWidth = (prefs.getDouble('workspace_left_width') ?? 300).clamp(220, 600);
-      _rightWidth = (prefs.getDouble('workspace_right_width') ?? 300).clamp(220, 600);
+      _leftWidth = (prefs.getDouble('workspace_left_width') ?? 300).clamp(
+        220,
+        600,
+      );
+      _rightWidth = (prefs.getDouble('workspace_right_width') ?? 300).clamp(
+        220,
+        600,
+      );
       _showSidebar = prefs.getBool('workspace_show_sidebar') ?? true;
       _drawerOpen = prefs.getBool('workspace_drawer_open') ?? true;
     });
@@ -117,15 +122,17 @@ class _EditorWorkspaceState extends State<EditorWorkspace> {
         if (mounted) setState(() {}); // updates app bar title, etc.
       } catch (e) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Failed to open file: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to open file: $e')));
       }
       return;
     }
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Unsupported file type')));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Unsupported file type')));
   }
 
   @override
@@ -238,17 +245,14 @@ class _EditorWorkspaceState extends State<EditorWorkspace> {
               ),
             ),
           if (_showSidebar) leftDivider,
-          
+
           // Editor in the middle
           Expanded(
             child: Stack(
               fit: StackFit.expand,
               children: [
                 // Editor stays alive even while a PDF is shown
-                EditorScreen(
-                  key: _editorKey,
-                  onFileSelected: _onFileSelected,
-                ),
+                EditorScreen(key: _editorKey, onFileSelected: _onFileSelected),
 
                 // Initial hint overlay if nothing selected (optional)
                 if (_currentFile == null)
@@ -262,15 +266,17 @@ class _EditorWorkspaceState extends State<EditorWorkspace> {
                 if (_showingPdf)
                   kIsWeb
                       ? const Center(
-                          child: Text('Web PDF viewing from local paths is not supported yet.'),
+                          child: Text(
+                            'Web PDF viewing from local paths is not supported yet.',
+                          ),
                         )
                       : PdfViewerPane(file: _currentFile!),
               ],
             ),
           ),
-          
+
           if (_drawerOpen) rightDivider,
-          
+
           // Persistent drawer on the right
           if (_drawerOpen)
             SizedBox(
@@ -368,6 +374,11 @@ class _EditorWorkspaceState extends State<EditorWorkspace> {
                         title: const Text('Classes'),
                         onTap: () {},
                       ),
+                      ListTile(
+                        leading: const Icon(Icons.flash_on_outlined),
+                        title: const Text('Flashcards'),
+                        onTap: () {},
+                      ),
                     ],
                   ),
                 ),
@@ -398,7 +409,10 @@ class _EditorWorkspaceState extends State<EditorWorkspace> {
               behavior: HitTestBehavior.translucent,
               onHorizontalDragUpdate: (details) {
                 setState(() {
-                  _rightWidth = (_rightWidth + details.delta.dx).clamp(220, 600);
+                  _rightWidth = (_rightWidth + details.delta.dx).clamp(
+                    220,
+                    600,
+                  );
                 });
                 _persistLayoutPrefs();
               },
