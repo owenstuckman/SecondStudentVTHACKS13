@@ -38,7 +38,7 @@ void main() async {
   final p = prefs.getString('path_to_files')?.trim();
 
   if (p != null && p.isNotEmpty) {
-    Sync().syncDown(p);
+    await Sync().syncDown(p);
   }
 
   // double check theme initialized

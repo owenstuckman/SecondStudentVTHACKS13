@@ -21,6 +21,8 @@ import 'package:secondstudent/pages/editor/custom_blocks/table_block.dart';
 import 'package:secondstudent/pages/editor/editor/table_editor.dart';
 
 // Iframe builder lives here (per your note)
+import 'package:secondstudent/pages/editor/custom_blocks/iframe_block.dart';
+
 import '../slash_menu/slash_menu.dart';
 import '../slash_menu/slash_menu_action.dart';
 import '../slash_menu/custom_slash_menu_items.dart';
@@ -28,10 +30,14 @@ import '../slash_menu/default_slash_menu_items.dart';
 import 'receive_blocks.dart';
 import '../../../globals/database.dart';
 import 'package:secondstudent/pages/editor/sync.dart';
+
 import '../template.dart';
 
 class EditorScreen extends StatefulWidget {
-  const EditorScreen({super.key, this.onFileSelected});
+  const EditorScreen({
+    super.key,
+    this.onFileSelected,
+  });
 
   final Future<void> Function(File file)? onFileSelected;
 
@@ -500,34 +506,38 @@ class _EditorScreenState extends State<EditorScreen> {
           );
         });
         break;
-      case SlashMenuAction.table:
-        final insertAt = _controller.selection.isValid
-            ? _controller.selection.start
-            : _controller.document.length;
-        final block = quill.BlockEmbed.custom(
-          TableBlockEmbed(
-            rows: const [
-              ['Header 1', 'Header 2'],
-              ['Row 1 Col 1', 'Row 1 Col 2'],
-            ],
-            headerRow: true,
-            colAlign: const ['left', 'center'],
-          ),
-        );
-        _controller.replaceText(
-          insertAt,
-          0,
-          block,
-          TextSelection.collapsed(offset: insertAt + 1),
-        );
-        _controller.replaceText(
-          insertAt + 1,
-          0,
-          '\n',
-          TextSelection.collapsed(offset: insertAt + 2),
-        );
-        break;
+    case SlashMenuAction.table:
+      final insertAt = _controller.selection.isValid
+          ? _controller.selection.start
+          : _controller.document.length;
+      final block = quill.BlockEmbed.custom(
+        TableBlockEmbed(
+          rows: const [
+            ['Header 1', 'Header 2'],
+            ['Row 1 Col 1', 'Row 1 Col 2'],
+          ],
+          headerRow: true,
+          colAlign: const ['left', 'center'],
+        ),
+      );
+      _controller.replaceText(
+        insertAt,
+        0,
+        block,
+        TextSelection.collapsed(offset: insertAt + 1),
+      );
+      _controller.replaceText(
+        insertAt + 1,
+        0,
+        '\n',
+        TextSelection.collapsed(offset: insertAt + 2),
+      );
+      break;
+
+
     }
+
+    
 
     // Execute the action if it exists in the map, passing the controller
     if (ReceiveBlocks().actionMap.containsKey(action)) {
@@ -597,15 +607,12 @@ class _EditorScreenState extends State<EditorScreen> {
                 ),
                 FilledButton(
                   onPressed: () async {
-                    if (_currentFilePath != null &&
-                        _currentFilePath!.isNotEmpty) {
+                    if (_currentFilePath != null && _currentFilePath!.isNotEmpty) {
                       await syncToCurrentFile(_currentFilePath!);
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text(
-                            'No file bound. Open a JSON file from the list first.',
-                          ),
+                          content: Text('No file bound. Open a JSON file from the list first.'),
                         ),
                       );
                     }
@@ -661,7 +668,7 @@ class _EditorScreenState extends State<EditorScreen> {
                             );
                             return;
                           }
-
+                          
                           // Handle other URLs externally
                           final uri = Uri.tryParse(url);
                           if (uri != null) {
@@ -673,16 +680,10 @@ class _EditorScreenState extends State<EditorScreen> {
                             } catch (_) {}
                           }
                         },
-                        embedBuilders: [
-                          TableEmbedBuilder(
-                            onEdit:
-                                (
-                                  context, {
-                                  required nodeOffset,
-                                  required currentRows,
-                                  required headerRow,
-                                  required colAlign,
-                                }) => editTableBlock(
+                          embedBuilders: [
+                            TableEmbedBuilder(
+                              onEdit: (context, {required nodeOffset, required currentRows, required headerRow, required colAlign}) => 
+                                editTableBlock(
                                   context,
                                   controller: _controller,
                                   nodeOffset: nodeOffset,
@@ -690,12 +691,13 @@ class _EditorScreenState extends State<EditorScreen> {
                                   headerRow: headerRow,
                                   colAlign: colAlign,
                                 ),
-                          ),
+                            ),
                           PageLinkBlockBuilder(
                             onOpenJson: _openJsonIntoEditor,
                             onFileSelected: widget.onFileSelected,
                           ),
-                          const PdfEmbedBuilder(),
+                          const PdfEmbedBuilder(), 
+                          const IframeEmbedBuilder(),
                           NotesEmbedBuilder(
                             onTapEdit: (ctx, {document, existingOffset}) =>
                                 cb.addEditNote(
