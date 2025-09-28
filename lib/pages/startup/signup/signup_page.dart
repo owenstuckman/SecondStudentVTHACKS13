@@ -22,7 +22,7 @@ Signup Page
 - Page used to create a new account
 - Uses custom widget "progression" as slide show
 - Handles new auth
-*/
+ */
 
 class Signup extends StatefulWidget {
   Signup({super.key, this.auth = true});
@@ -54,6 +54,7 @@ class _SignupState extends State<Signup> {
   bool hidePassword = true;
 
   DateTime? bday;
+
   String? gender;
 
   final TextEditingController _genderController = TextEditingController();
@@ -88,7 +89,7 @@ class _SignupState extends State<Signup> {
         'avatar_url': avatarUrl,
         'theme': theme,
         'gender': gender,
-        'birthday': bday?.toIso8601String(),
+        'birthday': bday == null ? null : (bday?.toIso8601String()),
         'location': '${_cityController.text}, ${_stateController.text}',
       });
     } catch (e) {
@@ -179,7 +180,9 @@ class _SignupState extends State<Signup> {
             activeColor: colorScheme.primary,
             checkColor: colorScheme.onPrimary,
             onChanged: (bool? value) async {
-              final String ip = await HttpManager.getIp() ?? "unknown IP address";
+              final String ip =
+                  await HttpManager.getIp() ?? " unknown IP adress";
+
               ppString = 'Agreed to Privacy Policy on ${DateTime.now()} at $ip';
               setState(() {
                 ppAgree = value ?? false;
@@ -207,7 +210,7 @@ class _SignupState extends State<Signup> {
                     recognizer: TapGestureRecognizer()
                       ..onTap = () {
                         HttpManager.launchURL(
-                          'https://termly.io/resources/templates/privacy-policy-template/',
+                          'https://sparkli.com/policies/privacy-policy',
                         );
                       },
                     style: TextStyle(
@@ -241,13 +244,16 @@ class _SignupState extends State<Signup> {
             itemCount: Themes.themeData.keys.length,
             itemBuilder: (context, i) {
               final String themeKey = Themes.themeData.keys.elementAt(i);
-              final ColorScheme themeColorScheme = Themes.themeData[themeKey]!.colorScheme;
+              final ColorScheme themeColorScheme =
+                  Themes.themeData[themeKey]!.colorScheme;
 
               return TextBubble(
                 text: themeKey,
                 textColor: themeColorScheme.onPrimary,
                 color: Themes.themeColor[themeKey],
-                borderColor: themeKey == theme ? themeColorScheme.onSurface : null,
+                borderColor: themeKey == theme
+                    ? themeColorScheme.onSurface
+                    : null,
                 margin: const EdgeInsets.symmetric(horizontal: 7.5),
                 onPressed: () {
                   setState(() {
@@ -275,7 +281,10 @@ class _SignupState extends State<Signup> {
               width: 10,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [colorScheme.surface, colorScheme.surface.withAlpha(0)],
+                  colors: [
+                    colorScheme.surface,
+                    colorScheme.surface.withAlpha(0),
+                  ],
                   begin: Alignment.centerRight,
                   end: Alignment.centerLeft,
                 ),
@@ -335,6 +344,36 @@ class _SignupState extends State<Signup> {
               };
             },
           ),
+          progressMethods:
+              List<Future<void> Function(void Function())>.generate(7, (p) {
+                return (void Function() next) async {
+                  if (!isBusy) {
+                    try {
+                      int page = p;
+                      if (!widget.auth) {
+                        page += 1;
+                      }
+                      if (page == 1 && !AuthService.authorized(anon: false)) {
+                        isBusy = true;
+                        await _signUp();
+                      }
+                      if (page == 3 && setGender) {
+                        gender = _genderController.text;
+                      }
+                      if (page >= 5) {
+                        await _finishAccount();
+                      }
+                      progress = p + 1;
+                      next();
+                    } on AuthException catch (e) {
+                      if (context.mounted) {
+                        context.showSnackBar(e.message);
+                      }
+                    }
+                    isBusy = false;
+                  }
+                };
+              }),
           nextTexts: widget.auth ? ['Continue', 'Register'] : null,
           conditions: [
             if (widget.auth) ...[
@@ -345,7 +384,8 @@ class _SignupState extends State<Signup> {
                   }
                   return false;
                 }
-                if (_nameController.text.isNotEmpty && _emailController.text.isNotEmpty) {
+                if (_nameController.text.isNotEmpty &&
+                    _emailController.text.isNotEmpty) {
                   return true;
                 }
                 if (active) {
@@ -354,9 +394,12 @@ class _SignupState extends State<Signup> {
                 return false;
               },
               (bool active) {
-                if (_passwordController.text.length < 6 && !AuthService.authorized(anon: false)) {
+                if (_passwordController.text.length < 6 &&
+                    !AuthService.authorized(anon: false)) {
                   if (active) {
-                    context.showSnackBar("Password must be 6 or more characters long.");
+                    context.showSnackBar(
+                      "Password must be 6 or more characters long.",
+                    );
                   }
                   return false;
                 }
@@ -387,59 +430,144 @@ class _SignupState extends State<Signup> {
               return false;
             },
           ],
-          colors: List.generate(7, (_) => Colors.transparent),
+          colors: [
+            Colors.transparent,
+            Colors.transparent,
+            Colors.transparent,
+            Colors.transparent,
+            Colors.transparent,
+            Colors.transparent,
+            Colors.transparent,
+          ],
           children: [
             if (widget.auth) ...[
               Container(
                 color: colorScheme.surface,
-                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
-                child: Opacity(
-                  opacity: AuthService.authorized(anon: false) ? 0.5 : 1,
-                  child: IgnorePointer(
-                    ignoring: AuthService.authorized(anon: false),
-                    child: _buildTextForm(
-                      controller: _passwordController,
-                      focus: _passwordFocus,
-                      text: 'Password',
-                      obscuretext: hidePassword,
-                      onSubmit: (_) {
-                        _passwordFocus.unfocus();
+                padding: const EdgeInsets.symmetric(
+                  vertical: 10,
+                  horizontal: 20,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        "Register",
+                        style: TextStyle(
+                          fontSize: 30,
+                          color: colorScheme.onSurface,
+                          fontFamily: "TheSeasons",
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    // Email input field
+                    _buildTextForm(
+                      controller: _nameController,
+                      focus: _nameFocus,
+                      text: 'Name',
+                      onSubmit: (text) {
+                        setState(() {
+                          _emailFocus.requestFocus();
+                        });
                       },
-                      suffix: Padding(
-                        padding: const EdgeInsets.only(right: 5),
-                        child: IconButton(
-                          onPressed: () {
-                            setState(() {
-                              hidePassword = !hidePassword;
-                            });
+                    ),
+                    const SizedBox(height: 15),
+                    // Password input field
+                    _buildTextForm(
+                      controller: _emailController,
+                      focus: _emailFocus,
+                      text: 'Email',
+                      input: TextInputType.emailAddress,
+                      onSubmit: (_) {
+                        _emailFocus.unfocus();
+                        progressWrapper.value?.call();
+                      },
+                    ),
+                    const SizedBox(height: 15),
+                    _buildPP(),
+                  ],
+                ),
+              ),
+              Container(
+                color: colorScheme.surface,
+                padding: const EdgeInsets.symmetric(
+                  vertical: 10,
+                  horizontal: 20,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        "Create a Password",
+                        style: TextStyle(
+                          fontSize: 30,
+                          color: colorScheme.onSurface,
+                          fontFamily: "TheSeasons",
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Email input field
+                    Opacity(
+                      opacity: AuthService.authorized(anon: false) ? 0.5 : 1,
+                      child: IgnorePointer(
+                        ignoring: AuthService.authorized(anon: false),
+                        child: _buildTextForm(
+                          controller: _passwordController,
+                          focus: _passwordFocus,
+                          text: 'Password',
+                          obscuretext: hidePassword,
+                          onSubmit: (_) {
+                            _passwordFocus.unfocus();
                           },
-                          icon: Icon(
-                            hidePassword ? Icons.visibility_off : Icons.visibility,
-                            color: colorScheme.onSurface,
-                            size: 27.5,
+                          suffix: Padding(
+                            padding: const EdgeInsets.only(right: 5),
+                            child: IconButton(
+                              onPressed: () {
+                                setState(() {
+                                  hidePassword = !hidePassword;
+                                });
+                              },
+                              icon: Icon(
+                                hidePassword
+                                    ? Icons.visibility_off
+                                    : Icons.visibility,
+                                color: colorScheme.onSurface,
+                                size: 27.5,
+                              ),
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                ),
-              ),
-              Container(
-                alignment: Alignment.centerLeft,
-                margin: const EdgeInsets.only(top: 4, bottom: 8),
-                child: Text(
-                  "Password with 6 or more characters",
-                  style: TextStyle(
-                    color: colorScheme.onSurface,
-                    fontSize: 11,
-                    fontFamily: 'Inter',
-                  ),
+                    Container(
+                      alignment: Alignment.centerLeft,
+                      margin: const EdgeInsets.only(top: 4, bottom: 8),
+                      child: Text(
+                        "Password with 6 or more characters",
+                        style: TextStyle(
+                          color: colorScheme.onSurface,
+                          fontSize: 11,
+                          fontFamily: 'Inter',
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ] else
               Container(
                 color: colorScheme.surface,
-                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+                padding: const EdgeInsets.symmetric(
+                  vertical: 10,
+                  horizontal: 20,
+                ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -456,6 +584,7 @@ class _SignupState extends State<Signup> {
                       ),
                     ),
                     const SizedBox(height: 10),
+                    // Email input field
                     _buildTextForm(
                       controller: _nameController,
                       focus: _nameFocus,
@@ -507,7 +636,10 @@ class _SignupState extends State<Signup> {
                     ),
                   ),
                   Container(
-                    margin: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                    margin: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 8,
+                    ),
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(5),
@@ -520,7 +652,9 @@ class _SignupState extends State<Signup> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          bday == null ? '--/--/----' : '${bday?.month}/${bday?.day}/${bday?.year}',
+                          bday == null
+                              ? '--/--/----'
+                              : '${bday?.month}/${bday?.day}/${bday?.year}',
                           style: TextStyle(
                             fontSize: 20,
                             color: colorScheme.onSurface,
@@ -612,7 +746,10 @@ class _SignupState extends State<Signup> {
                     duration: const Duration(milliseconds: 250),
                     curve: Curves.easeInOut,
                     height: setGender ? 70 : 0,
-                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 7.5),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 10,
+                      horizontal: 7.5,
+                    ),
                     child: _buildTextForm(
                       controller: _genderController,
                       focus: _genderFocus,
@@ -658,7 +795,10 @@ class _SignupState extends State<Signup> {
                     ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 7.5),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 10,
+                      horizontal: 7.5,
+                    ),
                     child: _buildTextForm(
                       controller: _stateController,
                       focus: _stateFocus,
@@ -673,7 +813,10 @@ class _SignupState extends State<Signup> {
                     duration: const Duration(milliseconds: 250),
                     curve: Curves.easeInOut,
                     height: _stateController.text.isNotEmpty ? 70 : 0,
-                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 7.5),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 10,
+                      horizontal: 7.5,
+                    ),
                     child: _buildTextForm(
                       controller: _cityController,
                       focus: _cityFocus,

@@ -67,9 +67,7 @@ class _AccountState extends State<Account> {
         'avatar_url': imageUrl,
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Updated your profile image!')),
-        );
+        const SnackBar(content: Text('Updated your profile image!'));
       }
     } catch (error) {
       if (mounted) {
@@ -87,38 +85,6 @@ class _AccountState extends State<Account> {
     setState(() {
       _avatarUrl = imageUrl;
     });
-  }
-
-  void _deleteAccount() async {
-    // Logic to delete the account
-    try {
-      final userId = supabase.auth.currentUser!.id;
-      await supabase.from('profiles').delete().eq('id', userId);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Account deleted successfully!')),
-        );
-      }
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Error deleting account'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  void _logout() async {
-    // Logic to log out the user
-    await supabase.auth.signOut();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Logged out successfully!')),
-      );
-    }
   }
 
   @override
@@ -168,14 +134,6 @@ class _AccountState extends State<Account> {
                   ],
                 ),
                 const SizedBox(height: 10),
-                ElevatedButton(
-                  onPressed: _logout,
-                  child: const Text('Log Out'),
-                ),
-                ElevatedButton(
-                  onPressed: _deleteAccount,
-                  child: const Text('Delete Account'),
-                ),
               ],
             ),
           ),

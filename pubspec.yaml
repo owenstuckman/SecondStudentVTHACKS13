@@ -2,7 +2,7 @@ name: secondstudent
 description: "A new Flutter project based around bettering the notes experience."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
-publish_to: "none" # Remove this line if you wish to publish to pub.dev
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 
 # The following defines the version and build number for your application.
 # A version number is three numbers separated by dots, like 1.2.43
@@ -54,20 +54,19 @@ dependencies:
   webview_flutter: ^4.7.0
   webview_flutter_android: ^3.16.2
   webview_flutter_wkwebview: ^3.12.0
-  webview_flutter_web: ^0.2.2+7
+  webview_flutter_web: ^0.2.2+7 
   # web: ^1.1.1
   calendar_view: ^1.4.0
   file_picker: ^10.3.3
   filesystem_picker: ^4.1.0
   sanitize_html: ^2.1.0
-  pdfx: ^2.5.0
+  pdfx: ^2.5.0   
   dart_eval: ^0.8.2
   flutter_html: ^3.0.0
   flutter_widget_from_html: ^0.17.1
   flutter_eval: ^0.8.1
   syncfusion_flutter_pdfviewer: ^31.1.21
   file_selector: ^1.0.3
-  quill_markdown: ^0.1.0
 
 dev_dependencies:
   flutter_test:
@@ -85,6 +84,7 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
+
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.
