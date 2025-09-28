@@ -7,7 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 
 import 'editor/editor.dart';
-import 'editor/pdf_viewer_pane.dart';          // <-- add this
+import 'editor/pdf_viewer_pane.dart';
 import 'file_system/file_system_viewer.dart';
 
 class EditorWorkspace extends StatefulWidget {
@@ -23,7 +23,6 @@ class _EditorWorkspaceState extends State<EditorWorkspace> {
   double _leftWidth = 300;
   bool _showSidebar = true;
 
-  // Track which file is open and whether we’re showing the PDF pane.
   File? _currentFile;
   bool get _showingPdf =>
       _currentFile != null &&
@@ -36,7 +35,6 @@ class _EditorWorkspaceState extends State<EditorWorkspace> {
     _restoreLayoutPrefs();
   }
 
-  /// Choose a default, writable workspace per platform and persist it if missing.
   Future<void> _ensureWorkspacePath() async {
     final prefs = await SharedPreferences.getInstance();
     final existing = prefs.getString('path_to_files');
@@ -44,7 +42,6 @@ class _EditorWorkspaceState extends State<EditorWorkspace> {
 
     String path;
     if (kIsWeb) {
-      // Placeholder: you'll later back this with IndexedDB / OPFS.
       path = 'web://workspace';
     } else if (Platform.isMacOS) {
       final support = await getApplicationSupportDirectory();
@@ -85,29 +82,33 @@ class _EditorWorkspaceState extends State<EditorWorkspace> {
     await prefs.setBool('workspace_show_sidebar', _showSidebar);
   }
 
+  // --- Key change: editor stays mounted; we safely feed it JSON even after a PDF ---
   Future<void> _onFileSelected(File file) async {
     final lower = file.path.toLowerCase();
     _currentFile = file;
 
     if (lower.endsWith('.pdf')) {
-      // Do not read as text. Just show the PDF viewer on the right.
-      setState(() {}); // triggers pane swap
+      // Just flip the overlay; do not touch the editor.
+      if (mounted) setState(() {});
       return;
     }
 
     if (lower.endsWith('.json')) {
       try {
         final json = await file.readAsString();
-        final state = _editorKey.currentState;
-        if (state == null) {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context)
-              .showSnackBar(const SnackBar(content: Text('Editor not ready yet.')));
-          return;
+
+        // If the editor state isn't ready *this frame*, schedule it for next.
+        void load() {
+          final state = _editorKey.currentState;
+          if (state != null) {
+            (state as dynamic).loadFromJsonString(json, sourcePath: file.path);
+          } else {
+            WidgetsBinding.instance.addPostFrameCallback((_) => load());
+          }
         }
-        // Let the editor load the JSON; keep the editor pane visible
-        (state as dynamic).loadFromJsonString(json, sourcePath: file.path);
-        setState(() {}); // track current file for title, rename, etc.
+
+        load();
+        if (mounted) setState(() {}); // updates app bar title, etc.
       } catch (e) {
         if (!mounted) return;
         ScaffoldMessenger.of(context)
@@ -116,7 +117,6 @@ class _EditorWorkspaceState extends State<EditorWorkspace> {
       return;
     }
 
-    // Non-openable (should be disabled upstream, but just in case)
     if (!mounted) return;
     ScaffoldMessenger.of(context)
         .showSnackBar(const SnackBar(content: Text('Unsupported file type')));
@@ -185,11 +185,9 @@ class _EditorWorkspaceState extends State<EditorWorkspace> {
                 child: FileSystemViewer(
                   onFileSelected: _onFileSelected,
                   onFileRenamed: (oldFile, newFile) {
-                    // Keep the right pane in sync if the open file was renamed
                     if (_currentFile?.path == oldFile.path) {
                       setState(() => _currentFile = newFile);
                     }
-                    // Also notify the editor if a JSON doc is open
                     final state = _editorKey.currentState;
                     if (state != null && !_showingPdf) {
                       try {
@@ -201,32 +199,35 @@ class _EditorWorkspaceState extends State<EditorWorkspace> {
               ),
             ),
           if (_showSidebar) divider,
+
+          // --- Key change: keep the editor ALWAYS mounted; overlay the PDF when needed ---
           Expanded(
-            child: _buildRightPane(),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                // Editor stays alive even while a PDF is shown
+                EditorScreen(key: _editorKey),
+
+                // Initial hint overlay if nothing selected (optional)
+                if (_currentFile == null)
+                  IgnorePointer(
+                    child: Center(
+                      child: Text('Select a JSON or PDF from the left.'),
+                    ),
+                  ),
+
+                // PDF overlay on top of the editor
+                if (_showingPdf)
+                  kIsWeb
+                      ? const Center(
+                          child: Text('Web PDF viewing from local paths is not supported yet.'),
+                        )
+                      : PdfViewerPane(file: _currentFile!),
+              ],
+            ),
           ),
         ],
       ),
     );
-  }
-
-  Widget _buildRightPane() {
-    // Nothing selected yet
-    if (_currentFile == null) {
-      return const Center(child: Text('Select a JSON or PDF from the left.'));
-    }
-
-    // PDF path
-    if (_showingPdf) {
-      if (kIsWeb) {
-        // Your PdfViewerPane already guards, but this makes it explicit
-        return const Center(
-          child: Text('Web PDF viewing from local paths is not supported yet.'),
-        );
-      }
-      return PdfViewerPane(file: _currentFile!);
-    }
-
-    // Editor path (JSON)
-    return EditorScreen(key: _editorKey);
   }
 }

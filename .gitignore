@@ -61,3 +61,7 @@ devFolder/token.json
 macos/Runner.xcodeproj/project.pbxproj
 pubspec.lock
 pubspec.yaml
+/linux/flutter
+macos/Podfile.lock
+macos/Runner.xcodeproj/project.pbxproj
+/windows/flutter
