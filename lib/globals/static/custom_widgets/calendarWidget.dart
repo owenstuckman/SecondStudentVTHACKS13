@@ -346,63 +346,67 @@ class _CalendarWidgetState extends State<CalendarWidget> {
             right: 16,
             top: 16,
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 10,
-                    height: 10,
-                    decoration: BoxDecoration(
-                      color: source == 'local'
-                          ? colorScheme.secondary
-                          : colorScheme.primary,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      event.title ?? 'Event',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        decoration: isCompleted
-                            ? TextDecoration.lineThrough
-                            : TextDecoration.none,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: source == 'local'
+                            ? colorScheme.secondary
+                            : colorScheme.primary,
+                        shape: BoxShape.circle,
                       ),
                     ),
-                  ),
-                ],
-              ),
-              SizedBox(height: 8),
-              Text(
-                'Due: ${event.date?.toLocal().toString() ?? ''}',
-                style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
-              ),
-              if (description.isNotEmpty) ...[
-                SizedBox(height: 8),
-                HtmlWidget(
-                  description,
-                  onTapUrl: (url) async {
-                    return await launchUrl(
-                      Uri.parse(url),
-                      mode: LaunchMode.externalApplication,
-                    );
-                  },
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        event.title ?? 'Event',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          decoration: isCompleted
+                              ? TextDecoration.lineThrough
+                              : TextDecoration.none,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-              if (htmlUrl != null && htmlUrl.isNotEmpty) ...[
                 SizedBox(height: 8),
                 Text(
-                  'Link: $htmlUrl',
-                  style: TextStyle(color: colorScheme.primary),
+                  'Due: ${event.date?.toLocal().toString() ?? ''}',
+                  style: TextStyle(
+                    color: colorScheme.onSurface.withOpacity(0.7),
+                  ),
                 ),
+                if (description.isNotEmpty) ...[
+                  SizedBox(height: 8),
+                  HtmlWidget(
+                    description,
+                    onTapUrl: (url) async {
+                      return await launchUrl(
+                        Uri.parse(url),
+                        mode: LaunchMode.externalApplication,
+                      );
+                    },
+                  ),
+                ],
+                if (htmlUrl != null && htmlUrl.isNotEmpty) ...[
+                  SizedBox(height: 8),
+                  Text(
+                    'Link: $htmlUrl',
+                    style: TextStyle(color: colorScheme.primary),
+                  ),
+                ],
+                SizedBox(height: 12),
               ],
-              SizedBox(height: 12),
-            ],
+            ),
           ),
         );
       },

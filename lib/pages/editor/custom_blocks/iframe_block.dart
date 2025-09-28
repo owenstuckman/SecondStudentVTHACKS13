@@ -1,12 +1,12 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'package:flutter_quill/src/editor/widgets/proxy.dart' show EmbedProxy;
 
-// Conditional import for web <iframe>
-import 'iframe_webview.dart'
-  if (dart.library.html) 'iframe_html_view_web.dart';
+// Import webview for all platforms
+import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_android/webview_flutter_android.dart';
+import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 
 /// Wrapper for the Quill custom block payload.
 class IframeBlockEmbed extends quill.CustomBlockEmbed {
@@ -65,40 +65,27 @@ class IframeEmbedBuilder implements quill.EmbedBuilder {
       }();
       if (!hostOk) return _errorBox(context, 'Blocked host:\n$url');
 
-      final view = kIsWeb
-          ? buildHtmlIFrame(url, height)
-          : SizedBox(height: height, child: IframeWebView(url: url));
+      final view = SizedBox(height: height, child: _UnifiedIframe(url: url));
 
-      // IMPORTANT: On native, don't use opaque hit-testing (not implemented on macOS).
-      if (kIsWeb) {
-        return EmbedProxy(
-          Listener(
-            behavior: HitTestBehavior.translucent,
-            onPointerDown: (_) => FocusScope.of(context).unfocus(),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: SizedBox(
-                height: height,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Theme.of(context).dividerColor),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: view,
+      return EmbedProxy(
+        Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: (_) => FocusScope.of(context).unfocus(),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: SizedBox(
+              height: height,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  border: Border.all(color: Theme.of(context).dividerColor),
+                  borderRadius: BorderRadius.circular(10),
                 ),
+                child: view,
               ),
             ),
           ),
-        );
-      } else {
-        return EmbedProxy(
-          Listener(
-            behavior: HitTestBehavior.translucent, // <- fix for macOS
-            onPointerDown: (_) => FocusScope.of(context).unfocus(),
-            child: view, // no Clip/Opacity/Transform around platform view
-          ),
-        );
-      }
+        ),
+      );
     } catch (e) {
       return _errorBox(context, 'Embed failed:\n$e');
     }
@@ -171,4 +158,64 @@ class IframeEmbedBuilder implements quill.EmbedBuilder {
     ),
     child: Text(msg, textAlign: TextAlign.center),
   );
+}
+
+class _UnifiedIframe extends StatefulWidget {
+  final String url;
+  
+  const _UnifiedIframe({required this.url});
+
+  @override
+  State<_UnifiedIframe> createState() => _UnifiedIframeState();
+}
+
+class _UnifiedIframeState extends State<_UnifiedIframe> {
+  late final WebViewController controller;
+  bool isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _setupWebView();
+  }
+
+  void _setupWebView() {
+    late final PlatformWebViewControllerCreationParams params;
+    if (WebViewPlatform.instance is WebKitWebViewPlatform) {
+      params = WebKitWebViewControllerCreationParams(
+        allowsInlineMediaPlayback: true,
+        mediaTypesRequiringUserAction: const <PlaybackMediaTypes>{},
+      );
+    } else {
+      params = const PlatformWebViewControllerCreationParams();
+    }
+
+    controller = WebViewController.fromPlatformCreationParams(params)
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageStarted: (_) => setState(() => isLoading = true),
+          onPageFinished: (_) => setState(() => isLoading = false),
+          onWebResourceError: (e) => debugPrint('Web error: ${e.description}'),
+        ),
+      )
+      ..loadRequest(Uri.parse(widget.url));
+
+    if (controller.platform is AndroidWebViewController) {
+      AndroidWebViewController.enableDebugging(true);
+      (controller.platform as AndroidWebViewController)
+          .setMediaPlaybackRequiresUserGesture(false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        WebViewWidget(controller: controller),
+        if (isLoading)
+          const Center(child: CircularProgressIndicator()),
+      ],
+    );
+  }
 }

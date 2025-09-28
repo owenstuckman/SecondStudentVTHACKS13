@@ -149,8 +149,7 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
   Future<void> _createBlankJsonAt(String dirPath) async {
     try {
       if (!_isWithinRoot(dirPath)) return;
-      final ts = DateTime.now().millisecondsSinceEpoch;
-      final file = File('$dirPath/new_$ts.json');
+      final file = File('$dirPath/untitled.json');
       await file.create(recursive: true);
 
       // Minimal valid Quill delta starter

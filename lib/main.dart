@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:localstorage/localstorage.dart';
-import 'package:secondstudent/globals/auth_service.dart';
-import 'package:secondstudent/pages/cardsPage/cardPage.dart';
 import 'dart:async';
 
 // pages
@@ -23,7 +21,6 @@ void main() async {
   // init supabase
 
   await DataBase.tryInitialize();
-  WidgetsFlutterBinding.ensureInitialized();
 
   // set orientation for chrome
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
