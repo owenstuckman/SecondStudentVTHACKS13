@@ -63,20 +63,30 @@ class General extends StatelessWidget {
 
     // Build up to 9 tiles (3 rows x 3 cols), padding with placeholders
     final tiles = <Widget>[
-      for (final fn in _functions)
+      for (final cfunction in cfunctions)
         Card(
           elevation: 2,
           clipBehavior: Clip.antiAlias,
           child: Padding(
             padding: const EdgeInsets.all(8),
-            child: CompilerWidget(
-              packages: {
-                'remote': {'main.dart': dbCode},
-              },
-              library: 'package:remote/main.dart',
-              function: fn,
-              args: args,
-            ),
+            child: (cfunction.exec.isNotEmpty)
+                ? Builder(
+                    builder: (context) {
+                      final args = (cfunction.name == 'ClassesCardEval')
+                          ? [
+                              de.$String(cfunction.name ?? ''),
+                              de.$String(cfunction.endpointId.toString()),
+                            ]
+                          : [
+                              de.$String(cfunction.name ?? ''),
+                              de.$String(cfunction.description ?? ''),
+                              de.$String(cfunction.endpointId.toString()),
+                            ];
+
+                      return CompilerWidget(
+                        packages: {
+                          'remote': {'main.dart': cfunction.exec},
+                        },
                         library: 'package:remote/main.dart',
                         function: cfunction.name + '.',
                         args: args,
