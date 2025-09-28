@@ -149,7 +149,20 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
   Future<void> _createBlankJsonAt(String dirPath) async {
     try {
       if (!_isWithinRoot(dirPath)) return;
-      final file = File('$dirPath/untitled.json');
+      
+      // Find a unique filename starting with "untitled"
+      String baseName = 'untitled';
+      String extension = '.json';
+      String fileName = '$baseName$extension';
+      int counter = 1;
+      
+      // Keep incrementing until we find a filename that doesn't exist
+      while (await File('$dirPath/$fileName').exists()) {
+        fileName = '$baseName$counter$extension';
+        counter++;
+      }
+      
+      final file = File('$dirPath/$fileName');
       await file.create(recursive: true);
 
       // Minimal valid Quill delta starter
