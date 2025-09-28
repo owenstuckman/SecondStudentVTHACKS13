@@ -404,12 +404,16 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
   void _onSubmit() async {
     final List<Map<String, dynamic>> snap = await supabase
         .from('documents')
-        .select('snapshot');
+        .select();
     print('Raw file contents: $snap');
     String newSnap = snap[0]['snapshot'];
 
     final List<dynamic> jsonData = jsonDecode(newSnap);
     if (jsonData.isNotEmpty) {
+      await supabase.from('document_events').insert({
+        "doc_id": snap[0]['id'],
+        "payload": snap[0]["payload"],
+      });
       final fileContent = jsonEncode(jsonData);
       // Assuming you want to create a new file with the fetched content
       await _createBlankJsonAt(_rootPath!);
