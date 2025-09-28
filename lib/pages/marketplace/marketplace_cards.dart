@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:secondstudent/globals/database.dart';
 import 'package:secondstudent/pages/marketplace/endpoint.dart';
-import 'package:dart_eval/dart_eval.dart';
+import 'package:dart_eval/stdlib/core.dart' as de;
 
 class MarketplaceCard {
   final String id;
@@ -58,15 +58,16 @@ class MarketplaceCards extends StatelessWidget {
 
     final dbCode = response[0]['exec'];
 
-    debugPrint(
-      'arg types: ${[(card.name.toString()), (card.description.toString()), (card.id.toString()), dbCode]}',
-    );
-
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => EvalPage(
           dbCode: dbCode,
-          args: [card.name, card.description, card.id],
+          args: [
+            de.$String(card.name),
+            de.$String(card.description),
+            de.$String(card.id),
+            const de.$null(),
+          ],
         ),
       ),
     );

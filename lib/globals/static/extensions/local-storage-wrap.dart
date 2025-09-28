@@ -41,3 +41,12 @@ extension LocalStorageWrap on LocalStorage {
     localStorage.setItem(key, jsonEncode(merged));
   }
 }
+
+void deleteItem(String key, String id) {
+  final existingRaw = localStorage.getItem(key);
+  final List<dynamic> existing = (existingRaw != null && existingRaw.isNotEmpty)
+      ? (jsonDecode(existingRaw) as List<dynamic>)
+      : <dynamic>[];
+
+  final Map<String, Map<String, dynamic>> byId = {};
+}
