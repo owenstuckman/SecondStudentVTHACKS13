@@ -373,6 +373,55 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
     }
   }
 
+  Future<void> _deleteFolder(Directory folder) async {
+    final dirPath = folder.parent.path;
+    if (!_isWithinRoot(dirPath)) return;
+
+    final folderName = _nameOf(folder.path);
+    
+    // Show confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Folder'),
+        content: Text('Are you sure you want to delete "$folderName" and all its contents?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await folder.delete(recursive: true);
+      
+      // Clear cache and refresh
+      _childrenCache.remove(dirPath);
+      await _ensureChildrenLoaded(dirPath);
+      
+      if (mounted) {
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Deleted folder $folderName')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to delete folder: $e')),
+      );
+    }
+  }
+
   Future<void> _deleteFile(File file) async {
     final dirPath = File(file.path).parent.path;
     if (!_isWithinRoot(dirPath)) return;
@@ -609,6 +658,12 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
                         tooltip: 'Rename Folder',
                         icon: const Icon(Icons.drive_file_rename_outline),
                         onPressed: () => _renameFolder(Directory(dirPath)),
+                      ),
+                      IconButton(
+                        tooltip: 'Delete Folder',
+                        icon: const Icon(Icons.delete_outline),
+                        onPressed: () => _deleteFolder(Directory(dirPath)),
+                        style: IconButton.styleFrom(foregroundColor: Colors.red),
                       ),
                       IconButton(
                         tooltip: expanded ? 'Collapse' : 'Expand',

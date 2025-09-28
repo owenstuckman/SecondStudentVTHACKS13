@@ -22,7 +22,7 @@ class CustomSlashMenuItems {
       action: SlashMenuAction.iframeExcalidraw,
       icon: Icons.draw_outlined,
       title: 'Excalidraw',
-      subtitle: 'Embed a room/share link',
+      subtitle: 'New drawing or room/share link',
     ),
     SlashMenuItemData(
       action: SlashMenuAction.iframeGoogleDoc,
