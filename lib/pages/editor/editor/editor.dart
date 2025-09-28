@@ -479,11 +479,14 @@ class EditorScreenState extends State<EditorScreen> {
         break;
 
       case SlashMenuAction.iframeExcalidraw:
-        _promptForUrl(context, label: 'Excalidraw room/share URL').then((url) {
-          if (url == null || url.isEmpty) return;
+        _promptForUrl(context, label: 'Excalidraw room/share URL (leave empty for new drawing)').then((url) {
+          // If user submits empty field, go to excalidraw.com
+          final excalidrawUrl = (url == null || url.trim().isEmpty) 
+              ? 'https://excalidraw.com' 
+              : url;
           cb.insertIframe(
             _controller,
-            url,
+            excalidrawUrl,
             height: 560,
           ); // helper normalizes & inserts
         });
