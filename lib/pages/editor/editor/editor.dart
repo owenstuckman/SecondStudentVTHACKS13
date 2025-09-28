@@ -54,11 +54,11 @@ class EditorScreen extends StatefulWidget {
   final String? fileLabel;
 
   @override
-  State<EditorScreen> createState() => _EditorScreenState();
+  State<EditorScreen> createState() => EditorScreenState();
 }
 
-class _EditorScreenState extends State<EditorScreen> {
-
+class EditorScreenState extends State<EditorScreen> {
+  static const String _prefsKey = 'editor_doc_delta';
 
   late quill.QuillController _controller;
   StreamSubscription? _docSub;
@@ -609,50 +609,6 @@ class _EditorScreenState extends State<EditorScreen> {
       onKeyEvent: _onKeyEvent,
       child: Column(
         children: [
-          // Toolbar
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-            child: Row(
-              children: [
-                FilledButton.tonal(
-                  onPressed: _newFromStarter,
-                  child: const Text('New File'),
-                ),
-                const SizedBox(width: 8),
-                FilledButton(
-                  onPressed: saveToCurrentFile,
-                  child: const Text('Save'),
-                ),
-                FilledButton(
-                  onPressed: () async {
-                    if (_currentFilePath != null &&
-                        _currentFilePath!.isNotEmpty) {
-                      await syncToCurrentFile(_currentFilePath!);
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'No file bound. Open a JSON file from the list first.',
-                          ),
-                        ),
-                      );
-                    }
-                  },
-                  child: const Text('Sync'),
-                ),
-                const SizedBox(width: 12),
-                if (_currentFilePath != null)
-                  Flexible(
-                    child: Text(
-                      'Editing: ${_basename(_currentFilePath!)}',
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.labelMedium,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 4),
           Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -816,8 +772,8 @@ extension _EditorScreenApiHook on State<EditorScreen> {
 
 /// Concrete API implementation that delegates to the editor state.
 class _EditorApiImpl implements _EditorScreenApi {
-  final _EditorScreenState _state;
-  _EditorApiImpl(State<EditorScreen> s) : _state = s as _EditorScreenState;
+  final EditorScreenState _state;
+  _EditorApiImpl(State<EditorScreen> s) : _state = s as EditorScreenState;
 
   @override
   void loadFromJson(String json, String filePath) {
