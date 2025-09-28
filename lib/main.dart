@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:localstorage/localstorage.dart';
 import 'dart:async';
+import 'dart:io'; 
 
 // pages
 import 'pages/startup/splash_page.dart';
@@ -36,6 +37,16 @@ void main() async {
 
   if (p != null && p.isNotEmpty) {
     await Sync().syncDown(p);
+  }
+
+  final String? pathToFiles = prefs.getString('path_to_files')?.trim();
+  if (pathToFiles != null && pathToFiles.isNotEmpty) {
+    final Directory studentDirectory = Directory(pathToFiles);
+    final Directory secondStudentDirectory = Directory('${studentDirectory.path}/.secondstudent');
+
+    if (!await secondStudentDirectory.exists()) {
+      await secondStudentDirectory.create(recursive: true);
+    }
   }
 
   // double check theme initialized

@@ -20,6 +20,7 @@ import 'package:secondstudent/pages/editor/custom_blocks/readonly_block.dart';
 import 'package:secondstudent/pages/editor/custom_blocks/table_block.dart';
 import 'package:secondstudent/pages/editor/editor/table_editor.dart';
 
+
 // Iframe builder lives here (per your note)
 import 'package:secondstudent/pages/editor/custom_blocks/iframe_block.dart';
 
@@ -32,6 +33,13 @@ import '../../../globals/database.dart';
 import 'package:secondstudent/pages/editor/sync.dart';
 
 import '../template.dart';
+
+/**
+
+need to somehow import this: 
+/.secondstudent/customblocks/execs.dart
+
+ */
 
 class EditorScreen extends StatefulWidget {
   const EditorScreen({
