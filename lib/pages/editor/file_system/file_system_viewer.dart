@@ -39,7 +39,6 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
   final TextEditingController _inputController = TextEditingController();
   
   // Drag and drop state
-  FileSystemEntity? _draggedItem;
   String? _dragTargetDir;
 
   @override
@@ -461,29 +460,73 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
 
     return Column(
       children: [
-        _noEnterSpaceActivation(
-          ListTile(
-            dense: true,
-            leading: Icon(expanded ? Icons.folder_open : Icons.folder),
-            title: Text(
-              name.isEmpty ? dirPath : name,
-              overflow: TextOverflow.ellipsis,
-            ),
-            subtitle: depth == 0
-                ? Text(shortenPath(dirPath), overflow: TextOverflow.ellipsis)
-                : null,
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  tooltip: expanded ? 'Collapse' : 'Expand',
-                  icon: Icon(expanded ? Icons.expand_less : Icons.expand_more),
-                  onPressed: () => _toggleExpand(dirPath),
+        DragTarget<FileSystemEntity>(
+          onWillAcceptWithDetails: (details) {
+            final data = details.data;
+            // Don't allow dropping a folder into itself or its subfolders
+            if (data is Directory && data.path.startsWith(dirPath)) return false;
+            // Don't allow dropping a file into its own directory
+            if (data is File && File(data.path).parent.path == dirPath) return false;
+            return true;
+          },
+          onAcceptWithDetails: (details) {
+            _moveItem(details.data, dirPath);
+          },
+          onMove: (details) {
+            setState(() {
+              _dragTargetDir = dirPath;
+            });
+          },
+          onLeave: (data) {
+            setState(() {
+              _dragTargetDir = null;
+            });
+          },
+          builder: (context, candidateData, rejectedData) {
+            final isDragTarget = _dragTargetDir == dirPath;
+            return _noEnterSpaceActivation(
+              Container(
+                decoration: BoxDecoration(
+                  color: isDragTarget 
+                      ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3)
+                      : null,
+                  borderRadius: BorderRadius.circular(4),
                 ),
-              ],
-            ),
-            onTap: () => _toggleExpand(dirPath), // mouse/touch still works
-          ),
+                child: ListTile(
+                  dense: true,
+                  leading: Icon(
+                    expanded ? Icons.folder_open : Icons.folder,
+                    color: isDragTarget 
+                        ? Theme.of(context).colorScheme.primary
+                        : null,
+                  ),
+                  title: Text(
+                    name.isEmpty ? dirPath : name,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: isDragTarget 
+                          ? Theme.of(context).colorScheme.primary
+                          : null,
+                    ),
+                  ),
+                  subtitle: depth == 0
+                      ? Text(shortenPath(dirPath), overflow: TextOverflow.ellipsis)
+                      : null,
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: expanded ? 'Collapse' : 'Expand',
+                        icon: Icon(expanded ? Icons.expand_less : Icons.expand_more),
+                        onPressed: () => _toggleExpand(dirPath),
+                      ),
+                    ],
+                  ),
+                  onTap: () => _toggleExpand(dirPath), // mouse/touch still works
+                ),
+              ),
+            );
+          },
         ),
         if (expanded)
           Padding(
@@ -525,13 +568,10 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
     return Draggable<FileSystemEntity>(
       data: file,
       onDragStarted: () {
-        setState(() {
-          _draggedItem = file;
-        });
+        // Drag started
       },
       onDragEnd: (details) {
         setState(() {
-          _draggedItem = null;
           _dragTargetDir = null;
         });
       },
