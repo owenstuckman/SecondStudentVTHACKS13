@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 
 class ClassesCardEval extends StatelessWidget {
   final String name;
-  final String unitCode;
+  final String description;
   final String id;
 
-  const ClassesCardEval(this.name, this.unitCode, this.id, {super.key});
+  const ClassesCardEval(this.name, this.description, this.id);
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +38,7 @@ class ClassesCardEval extends StatelessWidget {
                       ),
                       SizedBox(height: 4),
                       Text(
-                        unitCode,
+                        description,
                         style: TextStyle(fontSize: 13, color: Colors.black54),
                       ),
                     ],
@@ -78,11 +78,11 @@ class ClassesCardEval extends StatelessWidget {
 }
 
 class InfoBannerEval extends StatelessWidget {
-  final String title;
-  final String subtitle;
+  final String name;
+  final String description;
   final String id;
 
-  const InfoBannerEval(this.title, this.subtitle, this.id, {super.key});
+  const InfoBannerEval(this.name, this.description, this.id);
 
   @override
   Widget build(BuildContext context) {
@@ -96,7 +96,7 @@ class InfoBannerEval extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            title,
+            name,
             style: TextStyle(
               color: Colors.white,
               fontSize: 18,
@@ -104,7 +104,10 @@ class InfoBannerEval extends StatelessWidget {
             ),
           ),
           SizedBox(height: 6),
-          Text(subtitle, style: TextStyle(color: Colors.white70, fontSize: 14)),
+          Text(
+            description,
+            style: TextStyle(color: Colors.white70, fontSize: 14),
+          ),
           SizedBox(height: 8),
           Row(
             children: [
@@ -124,11 +127,11 @@ class InfoBannerEval extends StatelessWidget {
 }
 
 class OutlineTileEval extends StatelessWidget {
-  final String title;
-  final String subtitle;
+  final String name;
+  final String description;
   final String id;
 
-  const OutlineTileEval(this.title, this.subtitle, this.id, {super.key});
+  const OutlineTileEval(this.name, this.description, this.id);
 
   @override
   Widget build(BuildContext context) {
@@ -159,12 +162,12 @@ class OutlineTileEval extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  title,
+                  name,
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                 ),
                 SizedBox(height: 4),
                 Text(
-                  subtitle,
+                  description,
                   style: TextStyle(fontSize: 13, color: Colors.black54),
                 ),
               ],
@@ -178,11 +181,11 @@ class OutlineTileEval extends StatelessWidget {
 }
 
 class BadgeCardEval extends StatelessWidget {
-  final String title;
-  final String subtitle;
+  final String name;
+  final String description;
   final String id;
 
-  const BadgeCardEval(this.title, this.subtitle, this.id, {super.key});
+  const BadgeCardEval(this.name, this.description, this.id);
 
   @override
   Widget build(BuildContext context) {
@@ -219,12 +222,12 @@ class BadgeCardEval extends StatelessWidget {
             ),
             SizedBox(height: 12),
             Text(
-              title,
+              name,
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             SizedBox(height: 6),
             Text(
-              subtitle,
+              description,
               style: TextStyle(fontSize: 14, color: Colors.black54),
             ),
           ],
@@ -235,11 +238,11 @@ class BadgeCardEval extends StatelessWidget {
 }
 
 class IconInfoCardEval extends StatelessWidget {
-  final String title;
-  final String subtitle;
+  final String name;
+  final String description;
   final String id;
 
-  const IconInfoCardEval(this.title, this.subtitle, this.id, {super.key});
+  const IconInfoCardEval(this.name, this.description, this.id);
 
   @override
   Widget build(BuildContext context) {
@@ -269,12 +272,12 @@ class IconInfoCardEval extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    title,
+                    name,
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                   SizedBox(height: 4),
                   Text(
-                    subtitle,
+                    description,
                     style: TextStyle(fontSize: 13, color: Colors.black54),
                   ),
                 ],
@@ -289,11 +292,11 @@ class IconInfoCardEval extends StatelessWidget {
 }
 
 class TagCardEval extends StatelessWidget {
-  final String title;
-  final String subtitle;
+  final String name;
+  final String description;
   final String id;
 
-  const TagCardEval(this.title, this.subtitle, this.id, {super.key});
+  const TagCardEval(this.name, this.description, this.id);
 
   @override
   Widget build(BuildContext context) {
@@ -306,12 +309,12 @@ class TagCardEval extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              title,
+              name,
               style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
             ),
             SizedBox(height: 6),
             Text(
-              subtitle,
+              description,
               style: TextStyle(fontSize: 13, color: Colors.black54),
             ),
             SizedBox(height: 10),

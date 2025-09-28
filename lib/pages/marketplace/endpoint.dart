@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_eval/flutter_eval.dart';
 import 'package:dart_eval/dart_eval.dart';
+import 'package:secondstudent/pages/marketplace/marketplace_cards.dart';
+import 'package:dart_eval/stdlib/core.dart'
+    as de; // Import dart_eval/stdlib/core.dart as de
+import 'package:dart_eval/dart_eval.dart';
 
 class EvalPage extends StatelessWidget {
   const EvalPage({required this.dbCode, this.args = const []});
@@ -27,7 +31,7 @@ class EvalPage extends StatelessWidget {
 }
 
 class InfoBanner extends StatelessWidget {
-  const InfoBanner({super.key, required this.dbCode, required this.args});
+  const InfoBanner({required this.dbCode, required this.args});
 
   final String dbCode;
   final List<dynamic> args;
@@ -49,19 +53,9 @@ class InfoBanner extends StatelessWidget {
 }
 
 class General extends StatelessWidget {
-  const General({super.key, required this.dbCode, required this.args});
+  const General({required this.cfunctions});
 
-  final String dbCode;
-  final List<dynamic> args;
-
-  static const List<String> _functions = [
-    'ClassesCardEval.',
-    'InfoBannerEval.',
-    'OutlineTileEval.',
-    'BadgeCardEval.',
-    'IconInfoCardEval.',
-    'TagCardEval.',
-  ];
+  final List<CFunction> cfunctions;
 
   @override
   Widget build(BuildContext context) {
@@ -83,9 +77,19 @@ class General extends StatelessWidget {
               function: fn,
               args: args,
             ),
+                        library: 'package:remote/main.dart',
+                        function: cfunction.name + '.',
+                        args: args,
+                      );
+                    },
+                  )
+                : Center(
+                    child: Text('No code available for ${cfunction.name}'),
+                  ),
           ),
         ),
-      for (int i = 0; i < (9 - _functions.length).clamp(0, 9); i++)
+
+      for (int i = 0; i < (6 - cfunctions.length).clamp(0, 6); i++)
         Container(
           decoration: BoxDecoration(
             border: Border.all(color: colorScheme.outlineVariant),
