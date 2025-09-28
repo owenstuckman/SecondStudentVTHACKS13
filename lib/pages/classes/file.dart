@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:localstorage/localstorage.dart';
 import 'package:secondstudent/globals/static/extensions/canvasFullQuery.dart';
+import 'package:secondstudent/pages/remote_editor/remote_editor_page.dart';
 
 class FilePage extends StatefulWidget {
   final int courseId;
@@ -113,19 +114,42 @@ class _FilePageState extends State<FilePage> {
       title: Text(folder['name'] ?? 'Unnamed'),
       children: [
         ...subfolders.map(_buildFolderTile).toList(),
-        ...folderFiles.map<Widget>(
-          (f) => ListTile(
+        ...folderFiles.map<Widget>((f) {
+          final String name = (f['display_name'] ?? 'Unnamed').toString();
+          final int size = (f['size'] ?? 0) as int;
+          final String lower = name.toLowerCase();
+          final allowed =
+              lower.endsWith('.json') ||
+              lower.endsWith('.txt') ||
+              lower.endsWith('.md');
+          final bool withinSize = size < 10 * 1024 * 1024; // 10 MB
+          final bool clickable = allowed && withinSize;
+
+          return ListTile(
             leading: const Icon(Icons.insert_drive_file),
-            title: Text(f['display_name'] ?? 'Unnamed'),
-            subtitle: Text('${(f['size'] ?? 0)} bytes'),
-            onTap: () {
-              final url = f['url'];
-              if (url != null) {
-                // TODO: open url
-              }
-            },
-          ),
-        ),
+            title: Text(name),
+            subtitle: Text('${size} bytes'),
+            trailing: clickable ? const Icon(Icons.chevron_right) : null,
+            onTap: !clickable
+                ? null
+                : () {
+                    final url = f['url_private_download'] ?? f['url'];
+                    if (url == null) return;
+                    final token = localStorage.getItem('canvasToken');
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => RemoteEditorPage(
+                          fileUrl: url,
+                          headers: token != null
+                              ? {'Authorization': 'Bearer $token'}
+                              : null,
+                          fileName: name,
+                        ),
+                      ),
+                    );
+                  },
+          );
+        }),
       ],
     );
   }
