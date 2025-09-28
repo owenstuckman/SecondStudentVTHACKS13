@@ -65,11 +65,7 @@ class Settings extends StatelessWidget {
   }
 
   Widget canvasWaterMark(BuildContext context) {
-    return Container(
-      width: 100,
-      height: 100,
-      color: Colors.black,
-    );
+    return Container(width: 100, height: 100, color: Colors.black);
   }
 
   Widget _buildTextForm(
@@ -363,9 +359,13 @@ class Settings extends StatelessWidget {
                     );
                     if (ok == true) {
                       localStorage.setItem(
-                          'canvasToken', _canvasTokenController.text);
+                        'canvasToken',
+                        _canvasTokenController.text,
+                      );
                       localStorage.setItem(
-                          'canvasDomain', _canvasDomainController.text);
+                        'canvasDomain',
+                        _canvasDomainController.text,
+                      );
                     }
                   },
                 ),
@@ -426,8 +426,11 @@ class Settings extends StatelessWidget {
     );
   }
 
-  Widget _buildCanvasSettings(BuildContext context,
-      {required String token, required String domain}) {
+  Widget _buildCanvasSettings(
+    BuildContext context, {
+    required String token,
+    required String domain,
+  }) {
     final ColorScheme colorScheme = Theme.of(context).colorScheme;
 
     return Dialog(

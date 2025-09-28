@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:secondstudent/globals/database.dart';
+import 'package:secondstudent/pages/marketplace/endpoint.dart';
+import 'package:dart_eval/dart_eval.dart';
 
 class MarketplaceCard {
   final String id;
@@ -49,79 +51,24 @@ class MarketplaceCards extends StatelessWidget {
   }
 
   void _showDetailCard(BuildContext context, MarketplaceCard card) async {
-    // Fetch additional info from Supabase
-    final response = await supabase
+    final List<Map<String, dynamic>> response = await supabase
         .from('endpoints')
-        .select()
+        .select('*')
         .eq('collection', card.id);
 
-    List<Map<String, dynamic>> additionalInfoList = response;
+    final dbCode = response[0]['exec'];
 
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(card.name),
-          content: SingleChildScrollView(
-            child: Column(
-              children: [
-                Text('Description: ${card.description}'),
-                Text('Author: ${card.author}'),
-                Text('Verified: ${card.verified ? "Yes" : "No"}'),
-                Text('Enabled: ${card.enabled ? "Yes" : "No"}'),
-                Text('Created At: ${card.createdAt.toLocal()}'),
-                Text('Last Updated: ${card.lastUpdated?.toLocal() ?? "Never"}'),
-                SizedBox(height: 10), // Space before additional info
-                GridView.builder(
-                  shrinkWrap: true,
-                  physics: NeverScrollableScrollPhysics(),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    childAspectRatio: 3, // Adjust aspect ratio as needed
-                  ),
-                  itemCount: additionalInfoList.length,
-                  itemBuilder: (context, index) {
-                    final info = additionalInfoList[index];
-                    return Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              info['name'] ?? 'Unnamed',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            SizedBox(height: 4),
-                            Text(info['description'] ?? 'No description available'),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                if (card.metadata != null)
-                  Text('Metadata: ${card.metadata.toString()}'),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              child: Text('Close'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-          ],
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(15),
-          ),
-          contentPadding: EdgeInsets.all(70),
-          constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).size.width * 2 / 3,
-          ),
-        );
-      },
+    debugPrint(
+      'arg types: ${[(card.name.toString()), (card.description.toString()), (card.id.toString()), dbCode]}',
+    );
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => EvalPage(
+          dbCode: dbCode,
+          args: [card.name, card.description, card.id],
+        ),
+      ),
     );
   }
 
@@ -136,7 +83,9 @@ class MarketplaceCards extends StatelessWidget {
       itemBuilder: (context, index) {
         final card = cards[index];
         return GestureDetector(
-          onTap: () => _showDetailCard(context, card),
+          onTap: () {
+            _showDetailCard(context, card);
+          },
           child: Container(
             width: 300,
             height: 250, // Ensured all cards have a consistent height
