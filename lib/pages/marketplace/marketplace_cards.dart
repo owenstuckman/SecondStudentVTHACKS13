@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:secondstudent/globals/database.dart';
 import 'package:secondstudent/pages/marketplace/endpoint.dart';
-import 'package:dart_eval/stdlib/core.dart' as de;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io'; // Import for file handling
 
 class MarketplaceCard {
@@ -50,6 +50,7 @@ class CFunction {
 class MarketplaceCards extends StatelessWidget {
   final List<Map<String, dynamic>> data;
   final List<Map<String, dynamic>> endpoints = []; // Concurrent list to hold endpoints
+  final Set<String> installedEndpoints = {}; // Track installed endpoints
 
   MarketplaceCards({Key? key, required this.data}) : super(key: key);
 
@@ -57,7 +58,7 @@ class MarketplaceCards extends StatelessWidget {
     final List<Map<String, dynamic>> response = await supabase
         .from('collections') // Fetch data from the collections table
         .select();
-    
+
     return response.map((item) {
       return MarketplaceCard(
         id: item['id'].toString(),
@@ -82,18 +83,51 @@ class MarketplaceCards extends StatelessWidget {
 
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => EndpointsListView(endpoints: endpoints), // Navigate to the new list view
+        builder: (_) => EndpointsListView(
+          endpoints: endpoints,
+        ), // Navigate to the new list view
       ),
     );
   }
 
-  void _installEndpoint(BuildContext context, Map<String, dynamic> endpoint) async {
-    // Save the endpoint information to a file
-    final file = File('installed_endpoints.txt');
-    await file.writeAsString('Installed: ${endpoint['name']}\n', mode: FileMode.append);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Installed: ${endpoint['name']}')),
-    );
+  void _installEndpoint(
+    BuildContext context,
+    List<Map<String, dynamic>> endpoint,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    final String? pathToFiles = prefs.getString('path_to_files')?.trim();
+    if (pathToFiles != null && pathToFiles.isNotEmpty) {
+      final Directory studentDirectory = Directory(pathToFiles);
+      final Directory secondStudentDirectory = Directory(
+        '${studentDirectory.path}/.secondstudent/customblocks',
+      );
+
+      StringBuffer execCommands = StringBuffer();
+
+      for (var ep in endpoints) { // Use a different variable name
+        execCommands.writeln(ep['exec']);
+        installedEndpoints.add(ep['name']); // Track installed endpoint
+
+        /*
+  // Method to add a new item
+  void addItem(SlashMenuItemData item) {
+    _items.add(item);
+  }
+*/
+
+      }
+
+      if (!await secondStudentDirectory.exists()) {
+        await secondStudentDirectory.create(recursive: true);
+      }
+
+      final execFile = File('${secondStudentDirectory.path}/execs.dart');
+      await execFile.writeAsString(execCommands.toString());
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Installed')),
+      );
+    }
   }
 
   @override
@@ -150,21 +184,38 @@ class MarketplaceCards extends StatelessWidget {
                     SizedBox(height: 4), // Reduced space between elements
                     Text(
                       card.description,
-                      style: TextStyle(color: Colors.black87, fontSize: 12), // Reduced font size for description
+                      style: TextStyle(
+                        color: Colors.black87,
+                        fontSize: 12,
+                      ), // Reduced font size for description
                     ),
                     SizedBox(height: 4),
                     if (card.verified)
                       Text(
                         'Verified',
-                        style: TextStyle(color: Colors.green, fontSize: 10), // Reduced font size for verified label
+                        style: TextStyle(
+                          color: Colors.green,
+                          fontSize: 10,
+                        ), // Reduced font size for verified label
                       ),
                     SizedBox(height: 8), // Space before the button
                     ElevatedButton.icon(
-                      onPressed: () => _installEndpoint(context, card.metadata), // Pass the metadata for installation
-                      icon: Icon(Icons.install_desktop, size: 24), // Bigger icon
-                      label: Text('Install', style: TextStyle(fontSize: 16)), // Bigger text
+                      onPressed: installedEndpoints.contains(card.name) 
+                          ? null 
+                          : () => _installEndpoint(context, card.metadata), // Disable button if already installed
+                      icon: Icon(
+                        Icons.install_desktop,
+                        size: 24,
+                      ), // Bigger icon
+                      label: Text(
+                        'Install',
+                        style: TextStyle(fontSize: 16),
+                      ), // Bigger text
                       style: ElevatedButton.styleFrom(
-                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12), // Bigger button
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ), // Bigger button
                       ),
                     ),
                   ],
@@ -189,12 +240,7 @@ class EndpointsListView extends StatelessWidget {
       appBar: AppBar(
         title: Text('Endpoints'),
         actions: [
-          IconButton(
-            icon: Icon(Icons.install_desktop),
-            onPressed: () {
-              // Handle install action
-            },
-          ),
+          // Removed install button from the second page
         ],
       ),
       body: ListView.builder(
@@ -203,7 +249,9 @@ class EndpointsListView extends StatelessWidget {
           final endpoint = endpoints[index];
           return ListTile(
             title: Text(endpoint['name'] ?? 'Unnamed Endpoint'),
-            subtitle: Text(endpoint['description'] ?? 'No description available'),
+            subtitle: Text(
+              endpoint['description'] ?? 'No description available',
+            ),
             onTap: () {
               // Handle endpoint selection
             },
