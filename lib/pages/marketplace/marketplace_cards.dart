@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:secondstudent/globals/database.dart';
 import 'package:secondstudent/pages/marketplace/endpoint.dart';
 import 'package:dart_eval/stdlib/core.dart' as de;
+import 'dart:io'; // Import for file handling
 
 class MarketplaceCard {
   final String id;
@@ -36,7 +37,6 @@ class CFunction {
     required this.description,
   });
 
-  // Factory constructor to create a CFunction object from a Map
   factory CFunction.fromJson(Map<String, dynamic> json) {
     return CFunction(
       endpointId: json['endpointId'] as int,
@@ -49,11 +49,16 @@ class CFunction {
 
 class MarketplaceCards extends StatelessWidget {
   final List<Map<String, dynamic>> data;
+  final List<Map<String, dynamic>> endpoints = []; // Concurrent list to hold endpoints
 
-  const MarketplaceCards({Key? key, required this.data}) : super(key: key);
+  MarketplaceCards({Key? key, required this.data}) : super(key: key);
 
-  List<MarketplaceCard> get cards {
-    return data.map((item) {
+  Future<List<MarketplaceCard>> fetchCards() async {
+    final List<Map<String, dynamic>> response = await supabase
+        .from('collections') // Fetch data from the collections table
+        .select();
+    
+    return response.map((item) {
       return MarketplaceCard(
         id: item['id'].toString(),
         name: item['name'] ?? 'Unnamed',
@@ -61,7 +66,6 @@ class MarketplaceCards extends StatelessWidget {
         author: item['author']?.toString() ?? 'Unknown Author',
         verified: item['verified'] ?? false,
         enabled: item['enabled'] ?? false,
-
         metadata: item['metadata'],
       );
     }).toList();
@@ -73,100 +77,139 @@ class MarketplaceCards extends StatelessWidget {
         .select('*')
         .eq('collection', card.id);
 
-    final dbCode = response[0]['exec'];
+    endpoints.clear(); // Clear previous endpoints
+    endpoints.addAll(response); // Store the fetched endpoints
 
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => EvalPage(
-          dbCode: dbCode,
-          args: [
-            de.$String(card.name),
-            de.$String(card.description),
-            de.$String(card.id),
-          ],
-        ),
+        builder: (_) => EndpointsListView(endpoints: endpoints), // Navigate to the new list view
       ),
     );
   }
 
-  void _showGeneral(BuildContext context, MarketplaceCard card) async {
-    final List<Map<String, dynamic>> response = await supabase
-        .from('endpoints')
-        .select('*')
-        .eq('collection', card.id);
-
-    final List<CFunction> cfunctionDataList = response
-        .map((item) => CFunction.fromJson(item))
-        .toList();
-
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => General(cfunctions: cfunctionDataList)),
+  void _installEndpoint(BuildContext context, Map<String, dynamic> endpoint) async {
+    // Save the endpoint information to a file
+    final file = File('installed_endpoints.txt');
+    await file.writeAsString('Installed: ${endpoint['name']}\n', mode: FileMode.append);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Installed: ${endpoint['name']}')),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (cards.isEmpty) {
-      return Center(child: Text('No items available.'));
-    }
+    return FutureBuilder<List<MarketplaceCard>>(
+      future: fetchCards(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator());
+        } else if (snapshot.hasError) {
+          return Center(child: Text('Error: ${snapshot.error}'));
+        } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return Center(child: Text('No items available.'));
+        }
 
-    return ListView.builder(
-      itemCount: cards.length,
-      itemBuilder: (context, index) {
-        final card = cards[index];
-        return GestureDetector(
-          onTap: () {
-            _showGeneral(context, card);
+        final cards = snapshot.data!;
+
+        return ListView.builder(
+          itemCount: cards.length,
+          itemBuilder: (context, index) {
+            final card = cards[index];
+            return GestureDetector(
+              onTap: () {
+                _showDetailCard(context, card);
+              },
+              child: Container(
+                width: 250, // Reduced width for smaller cards
+                height: 200, // Reduced height for smaller cards
+                margin: EdgeInsets.all(8), // Reduced margin for better spacing
+                padding: EdgeInsets.all(12), // Reduced padding for a more compact look
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12), // Slightly smaller border radius
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1), // Lighter shadow for a softer look
+                      spreadRadius: 1,
+                      blurRadius: 3,
+                      offset: Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      card.name,
+                      style: TextStyle(
+                        color: Colors.black,
+                        fontSize: 16, // Reduced font size for the name
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    SizedBox(height: 4), // Reduced space between elements
+                    Text(
+                      card.description,
+                      style: TextStyle(color: Colors.black87, fontSize: 12), // Reduced font size for description
+                    ),
+                    SizedBox(height: 4),
+                    if (card.verified)
+                      Text(
+                        'Verified',
+                        style: TextStyle(color: Colors.green, fontSize: 10), // Reduced font size for verified label
+                      ),
+                    SizedBox(height: 8), // Space before the button
+                    ElevatedButton.icon(
+                      onPressed: () => _installEndpoint(context, card.metadata), // Pass the metadata for installation
+                      icon: Icon(Icons.install_desktop, size: 24), // Bigger icon
+                      label: Text('Install', style: TextStyle(fontSize: 16)), // Bigger text
+                      style: ElevatedButton.styleFrom(
+                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12), // Bigger button
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
           },
-          child: Container(
-            width: 300,
-            height: 250, // Ensured all cards have a consistent height
-            margin: EdgeInsets.all(10),
-            padding: EdgeInsets.all(15),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(15),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.2),
-                  spreadRadius: 2,
-                  blurRadius: 5,
-                  offset: Offset(0, 3),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  card.name,
-                  style: TextStyle(
-                    color: Colors.black,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                SizedBox(height: 5),
-                Text(
-                  card.description,
-                  style: TextStyle(color: Colors.black87, fontSize: 14),
-                ),
-                SizedBox(height: 10),
-                Text(
-                  'Author: ${card.author}',
-                  style: TextStyle(color: Colors.black54, fontSize: 12),
-                ),
-                SizedBox(height: 5),
-                if (card.verified)
-                  Text(
-                    'Verified',
-                    style: TextStyle(color: Colors.green, fontSize: 12),
-                  ),
-              ],
-            ),
-          ),
         );
       },
+    );
+  }
+}
+
+class EndpointsListView extends StatelessWidget {
+  final List<Map<String, dynamic>> endpoints;
+
+  const EndpointsListView({Key? key, required this.endpoints}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Endpoints'),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.install_desktop),
+            onPressed: () {
+              // Handle install action
+            },
+          ),
+        ],
+      ),
+      body: ListView.builder(
+        itemCount: endpoints.length,
+        itemBuilder: (context, index) {
+          final endpoint = endpoints[index];
+          return ListTile(
+            title: Text(endpoint['name'] ?? 'Unnamed Endpoint'),
+            subtitle: Text(endpoint['description'] ?? 'No description available'),
+            onTap: () {
+              // Handle endpoint selection
+            },
+          );
+        },
+      ),
     );
   }
 }
