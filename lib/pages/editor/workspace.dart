@@ -169,6 +169,36 @@ class _EditorWorkspaceState extends State<EditorWorkspace> {
       ),
       body: Row(
         children: [
+          // --- Key change: keep the editor ALWAYS mounted; overlay the PDF when needed ---
+          Expanded(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                // Editor stays alive even while a PDF is shown
+                EditorScreen(
+                  key: _editorKey,
+                  onFileSelected: _onFileSelected,
+                ),
+
+                // Initial hint overlay if nothing selected (optional)
+                if (_currentFile == null)
+                  IgnorePointer(
+                    child: Center(
+                      child: Text('Select a JSON or PDF from the right.'),
+                    ),
+                  ),
+
+                // PDF overlay on top of the editor
+                if (_showingPdf)
+                  kIsWeb
+                      ? const Center(
+                          child: Text('Web PDF viewing from local paths is not supported yet.'),
+                        )
+                      : PdfViewerPane(file: _currentFile!),
+              ],
+            ),
+          ),
+          if (_showSidebar) divider,
           if (_showSidebar)
             SizedBox(
               width: _leftWidth,
@@ -176,7 +206,7 @@ class _EditorWorkspaceState extends State<EditorWorkspace> {
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.surface,
                   border: Border(
-                    right: BorderSide(
+                    left: BorderSide(
                       color: Theme.of(context).dividerColor,
                       width: 1,
                     ),
@@ -198,37 +228,6 @@ class _EditorWorkspaceState extends State<EditorWorkspace> {
                 ),
               ),
             ),
-          if (_showSidebar) divider,
-
-          // --- Key change: keep the editor ALWAYS mounted; overlay the PDF when needed ---
-          Expanded(
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                // Editor stays alive even while a PDF is shown
-                EditorScreen(
-                  key: _editorKey,
-                  onFileSelected: _onFileSelected,
-                ),
-
-                // Initial hint overlay if nothing selected (optional)
-                if (_currentFile == null)
-                  IgnorePointer(
-                    child: Center(
-                      child: Text('Select a JSON or PDF from the left.'),
-                    ),
-                  ),
-
-                // PDF overlay on top of the editor
-                if (_showingPdf)
-                  kIsWeb
-                      ? const Center(
-                          child: Text('Web PDF viewing from local paths is not supported yet.'),
-                        )
-                      : PdfViewerPane(file: _currentFile!),
-              ],
-            ),
-          ),
         ],
       ),
     );
