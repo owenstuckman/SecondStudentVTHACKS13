@@ -10,12 +10,13 @@ import 'package:path/path.dart' as p;
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:secondstudent/pages/startup/home_page.dart';
+import 'package:secondstudent/pages/editor/sync.dart';
 
 class FileStorage extends StatelessWidget {
   const FileStorage({super.key});
 
   @override
-  Widget build(BuildContext context) =>  _FolderSelectorWidget();
+  Widget build(BuildContext context) => _FolderSelectorWidget();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -68,6 +69,8 @@ class _FolderSelectorWidgetState extends State<_FolderSelectorWidget> {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('path_to_files');
   }
+
+  String currentL = "";
 
   Future<void> _saveAndRestart(BuildContext context, String path) async {
     final prefs = await SharedPreferences.getInstance();
@@ -241,14 +244,15 @@ class _FolderSelectorWidgetState extends State<_FolderSelectorWidget> {
   Future<void> _useRecommended(BuildContext context) async {
     final ws = await _recommendedWorkspace();
 
-    if (!kIsWeb && (Platform.isMacOS || Platform.isWindows || Platform.isLinux)) {
+    if (!kIsWeb &&
+        (Platform.isMacOS || Platform.isWindows || Platform.isLinux)) {
       final docs = await _desktopDocumentsDir();
       final selectedPath = await FilesystemPicker.open(
         context: context,
         title: 'Use Recommended Folder',
         fsType: FilesystemType.folder,
-        rootDirectory: docs,   // root = ~/Documents (or HOME fallback)
-        directory: ws,         // start in ~/Documents/SecondStudent/workspace
+        rootDirectory: docs, // root = ~/Documents (or HOME fallback)
+        directory: ws, // start in ~/Documents/SecondStudent/workspace
         showGoUp: true,
         pickText: 'Use this folder',
         requestPermission: () async => true,
@@ -279,6 +283,11 @@ class _FolderSelectorWidgetState extends State<_FolderSelectorWidget> {
                   if (snap.connectionState == ConnectionState.waiting) {
                     return const CircularProgressIndicator();
                   }
+                  
+                      if (snap.data != null) {
+                        currentL = snap.data!;
+                      }
+                    
                   final current = snap.data;
                   final text = (current == null || current.isEmpty)
                       ? 'No folder selected'
@@ -289,6 +298,17 @@ class _FolderSelectorWidgetState extends State<_FolderSelectorWidget> {
                     style: const TextStyle(fontSize: 16),
                   );
                 },
+              ),
+              const SizedBox(height: 24),
+              TextButton(
+                onPressed: () {
+                  final sync = Sync();
+                  sync.syncAllFiles(currentL);
+                },
+                child: const Text(
+                  'You can sync through our own services!!',
+                  style: TextStyle(fontSize: 16),
+                ),
               ),
               const SizedBox(height: 24),
               TextButton(

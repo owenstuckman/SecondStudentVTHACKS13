@@ -12,6 +12,8 @@ import 'package:secondstudent/globals/notification_service.dart';
 import 'package:secondstudent/globals/static/themes.dart';
 import 'package:secondstudent/globals/stream_signal.dart';
 import 'package:secondstudent/globals/account_service.dart';
+import 'package:secondstudent/pages/editor/sync.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // initialize main stream signal
 final StreamController<StreamSignal> mainStream =
@@ -19,9 +21,6 @@ final StreamController<StreamSignal> mainStream =
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // init supabase
-  await DataBase.tryInitialize();
 
   // set orientation for chrome
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
@@ -31,6 +30,16 @@ void main() async {
 
   // init local storage
   await initLocalStorage();
+
+  final prefs = await SharedPreferences.getInstance();
+  final p = prefs.getString('path_to_files')?.trim();
+
+  if (p != null && p.isNotEmpty) {
+    await Sync().syncDown(p);
+  }
+
+  // init supabase
+  await DataBase.tryInitialize();
 
   // double check theme initialized
   Themes.checkTheme();
