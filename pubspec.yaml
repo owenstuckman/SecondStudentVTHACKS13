@@ -67,6 +67,7 @@ dependencies:
   flutter_eval: ^0.8.1
   syncfusion_flutter_pdfviewer: ^31.1.21
   file_selector: ^1.0.3
+  share: ^2.0.4
 
 dev_dependencies:
   flutter_test:
