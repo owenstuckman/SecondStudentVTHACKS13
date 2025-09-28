@@ -6,12 +6,8 @@ class Calendar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Calendar'),
-      ),
-      body: Center(
-        child: CalendarWidget("Test", "month"),
-      ),
+      appBar: AppBar(title: Text('Calendar')),
+      body: Center(child: CalendarWidget("Test", "month")),
     );
   }
 }

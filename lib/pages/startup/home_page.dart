@@ -19,6 +19,8 @@ import 'package:secondstudent/pages/editor/workspace.dart';
 import 'package:path/path.dart' as p;
 import 'dart:io';
 import 'package:secondstudent/pages/marketplace/marketplace.dart';
+import 'package:secondstudent/pages/flashcards/flashcards_page.dart';
+import 'package:secondstudent/pages/quiz/quiz-page.dart';
 
 /*
 Home Page Class
@@ -94,6 +96,18 @@ class HomePageState extends State<HomePage> {
       filled: Icons.school,
       outlined: Icons.school_outlined,
       label: 'Classes',
+      lock: false,
+    ),
+    _NavItem(
+      filled: Icons.flash_on,
+      outlined: Icons.flash_on_outlined,
+      label: 'Flashcards',
+      lock: false,
+    ),
+    _NavItem(
+      filled: Icons.flash_on,
+      outlined: Icons.flash_on_outlined,
+      label: 'Quiz',
       lock: false,
     ),
   ];
@@ -253,6 +267,27 @@ class HomePageState extends State<HomePage> {
                 child: _drawerOpen
                     ? _buildPersistentDrawer(context)
                     : const SizedBox.shrink(),
+              ),
+
+              // MAIN CONTENT
+              Expanded(
+                child: PageView(
+                  physics: const ClampingScrollPhysics(
+                    parent: PageScrollPhysics(),
+                  ),
+                  controller: _pageController,
+                  onPageChanged: (index) => setState(() => pageIndex = index),
+                  // ORDER must match _navItems above
+                  children: [
+                    EditorWorkspace(),
+                    Calendar(),
+                    ToDo(),
+                    Marketplace(),
+                    Classes(),
+                    FlashcardsPage(),
+                    QuizPage(),
+                  ],
+                ),
               ),
             ],
           ),
