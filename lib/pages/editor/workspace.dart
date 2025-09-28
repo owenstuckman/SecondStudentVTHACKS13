@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 
 import 'editor/editor.dart';
+import 'editor/pdf_viewer_pane.dart';
 import 'file_system/file_system_viewer.dart';
 
 class EditorWorkspace extends StatefulWidget {
@@ -22,14 +23,18 @@ class _EditorWorkspaceState extends State<EditorWorkspace> {
   double _leftWidth = 300;
   bool _showSidebar = true;
 
+  File? _currentFile;
+  bool get _showingPdf =>
+      _currentFile != null &&
+      _currentFile!.path.toLowerCase().endsWith('.pdf');
+
   @override
   void initState() {
     super.initState();
-    _ensureWorkspacePath();          // <- NEW: make sure a sane default exists
+    _ensureWorkspacePath();
     _restoreLayoutPrefs();
   }
 
-  /// Choose a default, writable workspace per platform and persist it if missing.
   Future<void> _ensureWorkspacePath() async {
     final prefs = await SharedPreferences.getInstance();
     final existing = prefs.getString('path_to_files');
@@ -37,16 +42,13 @@ class _EditorWorkspaceState extends State<EditorWorkspace> {
 
     String path;
     if (kIsWeb) {
-      // No native FS. Your FileStorage page can swap to IndexedDB later.
       path = 'web://workspace';
     } else if (Platform.isMacOS) {
-      // ~/Library/Application Support/<bundle-id>/SecondStudent/workspace
       final support = await getApplicationSupportDirectory();
       final ws = Directory(p.join(support.path, 'SecondStudent', 'workspace'));
       if (!await ws.exists()) await ws.create(recursive: true);
       path = ws.path;
     } else if (Platform.isWindows || Platform.isLinux) {
-      // App documents dir (writable). If you prefer real "Documents", add a helper or another plugin.
       final docs = await getApplicationDocumentsDirectory();
       final ws = Directory(p.join(docs.path, 'SecondStudent', 'workspace'));
       if (!await ws.exists()) await ws.create(recursive: true);
@@ -80,22 +82,44 @@ class _EditorWorkspaceState extends State<EditorWorkspace> {
     await prefs.setBool('workspace_show_sidebar', _showSidebar);
   }
 
+  // --- Key change: editor stays mounted; we safely feed it JSON even after a PDF ---
   Future<void> _onFileSelected(File file) async {
-    try {
-      final json = await file.readAsString();
-      final state = _editorKey.currentState;
-      if (state == null) {
+    final lower = file.path.toLowerCase();
+    _currentFile = file;
+
+    if (lower.endsWith('.pdf')) {
+      // Just flip the overlay; do not touch the editor.
+      if (mounted) setState(() {});
+      return;
+    }
+
+    if (lower.endsWith('.json')) {
+      try {
+        final json = await file.readAsString();
+
+        // If the editor state isn't ready *this frame*, schedule it for next.
+        void load() {
+          final state = _editorKey.currentState;
+          if (state != null) {
+            (state as dynamic).loadFromJsonString(json, sourcePath: file.path);
+          } else {
+            WidgetsBinding.instance.addPostFrameCallback((_) => load());
+          }
+        }
+
+        load();
+        if (mounted) setState(() {}); // updates app bar title, etc.
+      } catch (e) {
         if (!mounted) return;
         ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Editor not ready yet.')));
-        return;
+            .showSnackBar(SnackBar(content: Text('Failed to open file: $e')));
       }
-      (state as dynamic).loadFromJsonString(json, sourcePath: file.path);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Failed to open file: $e')));
+      return;
     }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Unsupported file type')));
   }
 
   @override
@@ -125,7 +149,12 @@ class _EditorWorkspaceState extends State<EditorWorkspace> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('SecondStudent — Workspace'),
+        title: Text(
+          _currentFile == null
+              ? 'SecondStudent — Workspace'
+              : 'SecondStudent — ${p.basename(_currentFile!.path)}',
+          overflow: TextOverflow.ellipsis,
+        ),
         actions: [
           IconButton(
             tooltip: _showSidebar ? 'Hide sidebar' : 'Show sidebar',
@@ -156,17 +185,47 @@ class _EditorWorkspaceState extends State<EditorWorkspace> {
                 child: FileSystemViewer(
                   onFileSelected: _onFileSelected,
                   onFileRenamed: (oldFile, newFile) {
+                    if (_currentFile?.path == oldFile.path) {
+                      setState(() => _currentFile = newFile);
+                    }
                     final state = _editorKey.currentState;
-                    if (state == null) return;
-                    try {
-                      (state as dynamic).updateCurrentFilePath(newFile.path);
-                    } catch (_) {}
+                    if (state != null && !_showingPdf) {
+                      try {
+                        (state as dynamic).updateCurrentFilePath(newFile.path);
+                      } catch (_) {}
+                    }
                   },
                 ),
               ),
             ),
           if (_showSidebar) divider,
-          Expanded(child: EditorScreen(key: _editorKey)),
+
+          // --- Key change: keep the editor ALWAYS mounted; overlay the PDF when needed ---
+          Expanded(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                // Editor stays alive even while a PDF is shown
+                EditorScreen(key: _editorKey),
+
+                // Initial hint overlay if nothing selected (optional)
+                if (_currentFile == null)
+                  IgnorePointer(
+                    child: Center(
+                      child: Text('Select a JSON or PDF from the left.'),
+                    ),
+                  ),
+
+                // PDF overlay on top of the editor
+                if (_showingPdf)
+                  kIsWeb
+                      ? const Center(
+                          child: Text('Web PDF viewing from local paths is not supported yet.'),
+                        )
+                      : PdfViewerPane(file: _currentFile!),
+              ],
+            ),
+          ),
         ],
       ),
     );
