@@ -152,7 +152,7 @@ class _ToDoState extends State<ToDo> {
                   onTap: () {
                     _addTodo(
                       title: _titleController.text.trim(),
-                      due: _selectedDate,
+                      due: _selectedDate ?? DateTime.now(),
                     );
                     _titleController.clear();
                     _selectedDate = null;

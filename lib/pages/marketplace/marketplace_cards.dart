@@ -73,6 +73,29 @@ class MarketplaceCards extends StatelessWidget {
     );
   }
 
+  void _showGeneral(BuildContext context, MarketplaceCard card) async {
+    final List<Map<String, dynamic>> response = await supabase
+        .from('endpoints')
+        .select('*')
+        .eq('collection', card.id);
+
+    final dbCode = response[0]['exec'];
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => General(
+          dbCode: dbCode,
+          args: [
+            de.$String(card.name),
+            de.$String(card.description),
+            de.$String(card.id),
+            const de.$null(),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (cards.isEmpty) {
@@ -85,7 +108,7 @@ class MarketplaceCards extends StatelessWidget {
         final card = cards[index];
         return GestureDetector(
           onTap: () {
-            _showDetailCard(context, card);
+            _showGeneral(context, card);
           },
           child: Container(
             width: 300,
