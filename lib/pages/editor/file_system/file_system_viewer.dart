@@ -472,7 +472,7 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
               const SizedBox(width: 8),
               FilledButton.tonal(
                 onPressed: () => _createBlankJsonAt(_rootPath!),
-                child: const Text('New JSON (root)'),
+                child: const Text('New Note'),
               ),
             ],
           ),

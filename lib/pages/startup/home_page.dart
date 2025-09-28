@@ -11,13 +11,13 @@ import 'package:secondstudent/pages/startup/welcome_page.dart';
 import '../account/account.dart';
 import '../settings/settings.dart';
 import '../../globals/static/custom_widgets/swipe_page_route.dart';
-import '../editor/editor/editor.dart';
-import 'package:secondstudent/globals/static/custom_widgets/logo.dart';
 import 'package:secondstudent/globals/stream_signal.dart';
 import 'package:secondstudent/pages/calendar/calendar.dart';
 import 'package:secondstudent/pages/todo/todo.dart';
 import 'file_storage.dart';
 import 'package:secondstudent/pages/editor/workspace.dart';
+import 'package:path/path.dart' as p;
+import 'dart:io';
 import 'package:secondstudent/pages/marketplace/marketplace.dart';
 
 /*
@@ -102,10 +102,13 @@ class HomePageState extends State<HomePage> {
   int pageIndex = 0;
 
   // Persistent drawer state & size
-  bool _drawerOpen = true;
+  bool _drawerOpen = true; // default to open
   double _drawerWidth = 320; // default
   static const double _minDrawerWidth = 260;
   static const double _maxDrawerWidth = 520;
+  
+  // GlobalKey to access EditorWorkspace methods
+  final GlobalKey<EditorWorkspaceState> _editorWorkspaceKey = GlobalKey<EditorWorkspaceState>();
 
   @override
   void dispose() {
@@ -115,6 +118,17 @@ class HomePageState extends State<HomePage> {
 
   void _toggleDrawer() {
     setState(() => _drawerOpen = !_drawerOpen);
+  }
+
+  Stream<File?> _getEditingFileStream() async* {
+    while (true) {
+      await Future.delayed(const Duration(milliseconds: 100));
+      if (_editorWorkspaceKey.currentState?.currentFile != null) {
+        yield _editorWorkspaceKey.currentState!.currentFile;
+      } else {
+        yield null;
+      }
+    }
   }
 
   @override
@@ -144,18 +158,58 @@ class HomePageState extends State<HomePage> {
         return Scaffold(
           // No Scaffold drawer: we render our own persistent drawer in the body.
           appBar: AppBar(
-            centerTitle: true,
-            forceMaterialTransparency: true,
+            centerTitle: false,
+            forceMaterialTransparency: false,
             elevation: 5,
-            backgroundColor: colorScheme.surfaceContainer,
+            backgroundColor: colorScheme.primary, // colored header
             shadowColor: colorScheme.shadow,
-            title: const Logo(),
-            leading: IconButton(
-              tooltip: _drawerOpen ? 'Close menu' : 'Open menu',
-              icon: const Icon(Icons.menu),
-              onPressed: _toggleDrawer, // toggle persistent drawer
+            title: const Text(
+              'SECOND STUDENT',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.2,
+              ),
             ),
             actions: [
+              // Save and Sync buttons
+              FilledButton(
+                onPressed: () async {
+                  await _editorWorkspaceKey.currentState?.saveCurrentFile();
+                },
+                child: const Text('Save'),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                onPressed: () async {
+                  await _editorWorkspaceKey.currentState?.syncCurrentFile();
+                },
+                child: const Text('Sync'),
+              ),
+              const SizedBox(width: 16),
+              // Editing status
+              StreamBuilder<File?>(
+                stream: _getEditingFileStream(),
+                builder: (context, snapshot) {
+                  if (snapshot.hasData && snapshot.data != null) {
+                    return Text(
+                      'Editing: ${p.basename(snapshot.data!.path)}',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onPrimary,
+                        fontSize: 14,
+                      ),
+                    );
+                  }
+                  return const SizedBox.shrink();
+                },
+              ),
+              const SizedBox(width: 16),
+              IconButton(
+                tooltip: _drawerOpen ? 'Close menu' : 'Open menu',
+                icon: const Icon(Icons.menu),
+                onPressed: _toggleDrawer, // toggle persistent drawer
+              ),
               const SizedBox(width: 8),
               IconButton(
                 onPressed: () {
@@ -163,7 +217,7 @@ class HomePageState extends State<HomePage> {
                 },
                 icon: Icon(
                   Icons.person_outlined,
-                  color: Theme.of(context).colorScheme.onSurface,
+                  color: Theme.of(context).colorScheme.onPrimary,
                   size: 30,
                 ),
               ).clip(),
@@ -175,7 +229,20 @@ class HomePageState extends State<HomePage> {
 
           body: Row(
             children: [
-              // PERSISTENT DRAWER PANEL
+              // MAIN CONTENT
+              Expanded(
+                child: PageView(
+                  physics: const ClampingScrollPhysics(
+                    parent: PageScrollPhysics(),
+                  ),
+                  controller: _pageController,
+                  onPageChanged: (index) => setState(() => pageIndex = index),
+                  // ORDER must match _navItems above
+                  children: [EditorWorkspace(key: _editorWorkspaceKey), Calendar(), ToDo(), Marketplace(), Classes()],
+                ),
+              ),
+
+              // PERSISTENT DRAWER PANEL (moved to right)
               AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 curve: Curves.easeInOut,
@@ -186,19 +253,6 @@ class HomePageState extends State<HomePage> {
                 child: _drawerOpen
                     ? _buildPersistentDrawer(context)
                     : const SizedBox.shrink(),
-              ),
-
-              // MAIN CONTENT
-              Expanded(
-                child: PageView(
-                  physics: const ClampingScrollPhysics(
-                    parent: PageScrollPhysics(),
-                  ),
-                  controller: _pageController,
-                  onPageChanged: (index) => setState(() => pageIndex = index),
-                  // ORDER must match _navItems above
-                  children: [EditorWorkspace(), Calendar(), ToDo(), Marketplace(), Classes()],
-                ),
               ),
             ],
           ),
@@ -224,8 +278,6 @@ class HomePageState extends State<HomePage> {
               child: Column(
                 children: [
                   const SizedBox(height: 12),
-                  const Logo(),
-                  const Divider(),
 
                   // NAV ITEMS
                   Expanded(
@@ -303,7 +355,7 @@ class HomePageState extends State<HomePage> {
               ),
             ),
 
-            // RESIZE HANDLE (touch/drag on drawer's right edge)
+            // RESIZE HANDLE (touch/drag on drawer's left edge)
             // Drags horizontally to resize the drawer.
             MouseRegion(
               cursor: SystemMouseCursors.resizeLeftRight,
@@ -311,7 +363,7 @@ class HomePageState extends State<HomePage> {
                 behavior: HitTestBehavior.translucent,
                 onHorizontalDragUpdate: (details) {
                   setState(() {
-                    _drawerWidth = (_drawerWidth + details.delta.dx).clamp(
+                    _drawerWidth = (_drawerWidth - details.delta.dx).clamp(
                       _minDrawerWidth,
                       _maxDrawerWidth,
                     );
