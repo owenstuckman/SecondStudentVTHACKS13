@@ -37,7 +37,7 @@ void main() async {
   final p = prefs.getString('path_to_files')?.trim();
 
   if (p != null && p.isNotEmpty) {
-    await Sync().syncDown(p);
+    Sync().syncDown(p);
   }
 
   // init supabase
