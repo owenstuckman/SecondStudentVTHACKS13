@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:filesystem_picker/filesystem_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import 'package:url_launcher/url_launcher.dart';
 
 import 'package:secondstudent/pages/startup/home_page.dart';
 
@@ -14,7 +15,7 @@ class FileStorage extends StatelessWidget {
   const FileStorage({super.key});
 
   @override
-  Widget build(BuildContext context) => const _FolderSelectorWidget();
+  Widget build(BuildContext context) =>  _FolderSelectorWidget();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -22,7 +23,8 @@ class FileStorage extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 String _prettyPath(String path) {
-  final home = Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];
+  final home =
+      Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];
   if (home != null && home.isNotEmpty) {
     final normHome = Directory(home).absolute.path;
     final normPath = Directory(path).absolute.path;
@@ -44,100 +46,19 @@ Future<Directory> _desktopDocumentsDir() async {
     }
     return Directory('C:\\');
   }
-
   // macOS / Linux
   final home = Platform.environment['HOME'];
   if (home != null && home.isNotEmpty) {
-    final docs = Directory(p.join(home, 'Downloads'));
+    final docs = Directory(p.join(home, 'Documents'));
     if (await docs.exists()) return docs;
     return Directory(home);
   }
 
-  // Fallback
+  // fallback
   return Directory.current;
 }
-
-/// Our recommended workspace location (human-friendly).
-Future<Directory> _recommendedWorkspace() async {
-  if (kIsWeb) {
-    // Temporary stub for web; replace with IndexedDB later.
-    return Directory.systemTemp.createTemp('secondstudent_web_workspace_');
-  }
-
-  if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
-    final docs = await _desktopDocumentsDir();
-    final ws = Directory(p.join(docs.path, 'SecondStudent', 'workspace'));
-    if (!await ws.exists()) {
-      await ws.create(recursive: true);
-    }
-    return ws;
-  }
-
-  if (Platform.isAndroid || Platform.isIOS) {
-    final docs = await getApplicationDocumentsDirectory();
-    final ws = Directory(p.join(docs.path, 'workspace'));
-    if (!await ws.exists()) {
-      await ws.create(recursive: true);
-    }
-    return ws;
-  }
-
-  // Last resort
-  final tmp = await getTemporaryDirectory();
-  final ws = Directory(p.join(tmp.path, 'workspace'));
-  if (!await ws.exists()) {
-    await ws.create(recursive: true);
-  }
-  return ws;
-}
-
-/// Starting root for the folder picker (what the user can browse).
-Future<Directory> _pickerRoot() async {
-  if (kIsWeb) return Directory.systemTemp;
-
-  if (Platform.isMacOS || Platform.isLinux) {
-    return _desktopDocumentsDir();
-  }
-
-  if (Platform.isWindows) {
-    final user = Platform.environment['USERPROFILE'] ?? 'C:\\';
-    final dir = Directory(user);
-    if (await dir.exists()) return dir;
-    return Directory('C:\\');
-  }
-
-  if (Platform.isAndroid || Platform.isIOS) {
-    return getApplicationDocumentsDirectory();
-  }
-
-  return Directory.current;
-}
-
-/// Option A preflight: try listing the folder to detect EPERM before saving.
-/// Returns `true` if accessible, `false` if EPERM (or other access errors).
-Future<bool> _canAccessDirectory(String path) async {
-  try {
-    final dir = Directory(path);
-    if (!await dir.exists()) return true; // let creation/saving proceed
-    // Tiny probe: list at most 1 entry (non-recursive).
-    await dir.list(followLinks: false).take(1).toList();
-    return true;
-  } on FileSystemException catch (e) {
-    // EPERM = 1 on macOS
-    if (e.osError?.errorCode == 1) return false;
-    return false;
-  } catch (_) {
-    return false;
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// UI
-// ─────────────────────────────────────────────────────────────────────────────
 
 class _FolderSelectorWidget extends StatefulWidget {
-  const _FolderSelectorWidget();
-
   @override
   State<_FolderSelectorWidget> createState() => _FolderSelectorWidgetState();
 }
@@ -149,49 +70,133 @@ class _FolderSelectorWidgetState extends State<_FolderSelectorWidget> {
   }
 
   Future<void> _saveAndRestart(BuildContext context, String path) async {
-    // Option A: preflight check & re-prompt on EPERM.
-    final ok = await _canAccessDirectory(path);
-    if (!ok && mounted) {
-      await showDialog<void>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Permission needed'),
-          content: Text(
-            'macOS needs you to select the folder via the picker so the app can access it.\n\n'
-            'Folder: ${_prettyPath(path)}',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                _pickFolder(context);
-              },
-              child: const Text('Select Folder'),
-            ),
-          ],
-        ),
-      );
-      return;
-    }
-
     final prefs = await SharedPreferences.getInstance();
+    // Normalize to an absolute, clean path
     final normalized = Directory(path).absolute.path;
     await prefs.setString('path_to_files', normalized);
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Folder saved: ${_prettyPath(normalized)}')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Folder path saved: $normalized')));
 
-    // Return to HomePage so the workspace re-reads prefs.
+    // Return to HomePage so your workspace re-reads prefs
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => HomePage()),
       (route) => false,
     );
+  }
+
+  /// Root for the picker (what the UI is allowed to browse).
+  /// Must exist on the current platform.
+  Future<Directory> _pickerRoot() async {
+    if (kIsWeb) {
+      // The package doesn't work on web. You'll need a web storage UI later.
+      // For now, pretend a virtual root.
+      return Directory.systemTemp;
+    }
+
+    if (Platform.isMacOS || Platform.isLinux) {
+      // User's home is a good, familiar starting root
+      final home = Platform.environment['HOME'];
+      if (home != null && home.isNotEmpty) {
+        final dir = Directory(home);
+        if (await dir.exists()) return dir;
+      }
+      // Fallback to Documents if HOME missing
+      final docs = await getApplicationDocumentsDirectory();
+      return Directory(p.dirname(docs.path));
+    }
+
+    if (Platform.isWindows) {
+      // Typical Windows user profile root
+      final user = Platform.environment['USERPROFILE'] ?? 'C:\\';
+      final dir = Directory(user);
+      if (await dir.exists()) return dir;
+      return Directory('C:\\');
+    }
+
+    if (Platform.isAndroid || Platform.isIOS) {
+      // On mobile, keep it scoped to app documents
+      return await getApplicationDocumentsDirectory();
+    }
+
+    // Fallback
+    return Directory.current;
+  }
+
+  // add this helper
+  String _prettyPath(String path) {
+    final home =
+        Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];
+    if (home != null && home.isNotEmpty) {
+      final normHome = Directory(home).absolute.path;
+      final normPath = Directory(path).absolute.path;
+      if (normPath.startsWith(normHome)) {
+        return normPath.replaceFirst(normHome, '~');
+      }
+    }
+    return path;
+  }
+
+  // Helper: best guess for a user's "Documents" on desktop
+  Future<Directory> _desktopDocumentsDir() async {
+    if (Platform.isWindows) {
+      final user = Platform.environment['USERPROFILE'];
+      if (user != null && user.isNotEmpty) {
+        final docs = Directory(p.join(user, 'Documents'));
+        if (await docs.exists()) return docs;
+        return Directory(user);
+      }
+      return Directory('C:\\');
+    }
+
+    // macOS / Linux
+    final home = Platform.environment['HOME'];
+    if (home != null && home.isNotEmpty) {
+      final docs = Directory(p.join(home, 'Documents'));
+      if (await docs.exists()) return docs;
+      return Directory(home);
+    }
+
+    // fallback
+    return Directory.current;
+  }
+
+  // REPLACE your existing _recommendedWorkspace() with this:
+  Future<Directory> _recommendedWorkspace() async {
+    if (kIsWeb) {
+      // Stubbed; replace with IndexedDB later
+      return Directory.systemTemp.createTemp('secondstudent_web_workspace_');
+    }
+
+    if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+      // Prefer ~/Documents/SecondStudent/workspace
+      final docs = await _desktopDocumentsDir();
+      var ws = Directory(p.join(docs.path, 'SecondStudent', 'workspace'));
+      try {
+        if (!await ws.exists()) await ws.create(recursive: true);
+        return ws;
+      } catch (_) {
+        // fallback to app-docs if creating under Documents failed
+        final appDocs = await getApplicationDocumentsDirectory();
+        ws = Directory(p.join(appDocs.path, 'SecondStudent', 'workspace'));
+        if (!await ws.exists()) await ws.create(recursive: true);
+        return ws;
+      }
+    }
+
+    if (Platform.isAndroid || Platform.isIOS) {
+      final docs = await getApplicationDocumentsDirectory();
+      final ws = Directory(p.join(docs.path, 'workspace'));
+      if (!await ws.exists()) await ws.create(recursive: true);
+      return ws;
+    }
+
+    final tmp = await getTemporaryDirectory();
+    final ws = Directory(p.join(tmp.path, 'workspace'));
+    if (!await ws.exists()) await ws.create(recursive: true);
+    return ws;
   }
 
   Future<void> _pickFolder(BuildContext context) async {
@@ -206,7 +211,11 @@ class _FolderSelectorWidgetState extends State<_FolderSelectorWidget> {
     if (!await root.exists()) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Root path does not exist: ${root.path}')),
+        SnackBar(
+          content: Text(
+            'Error loading file list: The "${root.path}" path does not exist.',
+          ),
+        ),
       );
       return;
     }
@@ -215,11 +224,12 @@ class _FolderSelectorWidgetState extends State<_FolderSelectorWidget> {
       context: context,
       title: 'Select a Folder',
       fsType: FilesystemType.folder,
-      rootDirectory: root,
-      directory: root,
+      rootDirectory: root, // ✅ platform-correct root
+      directory: root, // start here
       showGoUp: true,
       pickText: 'Use this folder',
-      requestPermission: () async => true, // desktop: no runtime dialog
+      requestPermission: () async =>
+          true, // desktop: no runtime permission dialog
     );
 
     if (selectedPath == null) return; // user cancelled
@@ -281,11 +291,26 @@ class _FolderSelectorWidgetState extends State<_FolderSelectorWidget> {
                 },
               ),
               const SizedBox(height: 24),
+              TextButton(
+                onPressed: () {
+                  launch('https://onedrive.live.com/?view=1');
+                  print('Link clicked');
+                },
+                child: const Text(
+                  'Feel free to sync your files on your own via OneDrive!',
+                  style: TextStyle(fontSize: 16),
+                ),
+              ),
+              const SizedBox(height: 24),
               FilledButton(
                 onPressed: () => _pickFolder(context),
-                child: const Text('Choose a Folder…', style: TextStyle(fontSize: 18)),
+                child: const Text(
+                  'Choose a Folder…',
+                  style: TextStyle(fontSize: 18),
+                ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 24),
+
               TextButton(
                 onPressed: () => _useRecommended(context),
                 child: const Text('Use Recommended Default'),
