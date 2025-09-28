@@ -20,6 +20,8 @@ final StreamController<StreamSignal> mainStream =
     StreamController<StreamSignal>();
 
 void main() async {
+  // init supabase
+  await DataBase.tryInitialize();
   WidgetsFlutterBinding.ensureInitialized();
 
   // set orientation for chrome
