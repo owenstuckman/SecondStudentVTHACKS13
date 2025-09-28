@@ -176,12 +176,6 @@ class EditorWorkspaceState extends State<EditorWorkspace> {
                       key: _editorKey,
                       onFileSelected: _onFileSelected,
                     ),
-                    if (_currentFile == null)
-                      const IgnorePointer(
-                        child: Center(
-                          child: Text('Select a JSON or PDF from the left.'),
-                        ),
-                      ),
                     if (_showingPdf)
                       kIsWeb
                           ? const Center(
