@@ -13,12 +13,14 @@ class Sync {
 
     // Read the file content as a string
     final jsonData = await file.readAsString();
+    String uuid = (await supabase.auth.getUser()).user?.id ?? '';
 
     // Upsert the document in Supabase
     await supabase.from('documents').upsert({
       "title": filePath, // Use filePath instead of file object
       "snapshot": jsonData,
       "updated_at": ts,
+      "created_by": uuid
     });
   }
 
@@ -26,6 +28,8 @@ class Sync {
     final ts = DateTime.now().toIso8601String();
     final directory = Directory(rootDir);
     final files = directory.listSync(recursive: true);
+
+    String uuid = (await supabase.auth.getUser()).user?.id ?? '';
 
     for (var fileEntity in files) {
       if (fileEntity is File) {
@@ -42,6 +46,7 @@ class Sync {
             "snapshot": jsonData.toString(),
             "updated_at": ts,
             "vault": rootDir,
+            "created_by": uuid
           });
         } else {
           // Upload the non-JSON file to Supabase storage
