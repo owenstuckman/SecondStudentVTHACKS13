@@ -1,13 +1,11 @@
 // lib/file_system_viewer.dart
 import 'dart:convert';
 import 'dart:io';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // Shortcuts/Actions/Intents, LogicalKeyboardKey
 import 'package:shared_preferences/shared_preferences.dart';
-
-import 'package:http/http.dart';
+import 'package:secondstudent/globals/database.dart';
 
 typedef FileSelected = void Function(File file);
 typedef FileRenamed = void Function(File oldFile, File newFile);
