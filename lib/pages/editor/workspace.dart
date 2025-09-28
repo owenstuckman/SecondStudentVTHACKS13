@@ -26,8 +26,7 @@ class EditorWorkspaceState extends State<EditorWorkspace> {
   File? _currentFile;
   File? get currentFile => _currentFile;
   bool get _showingPdf =>
-      _currentFile != null &&
-      _currentFile!.path.toLowerCase().endsWith('.pdf');
+      _currentFile != null && _currentFile!.path.toLowerCase().endsWith('.pdf');
 
   @override
   void initState() {
@@ -95,12 +94,10 @@ class EditorWorkspaceState extends State<EditorWorkspace> {
         final json = await file.readAsString();
         editorState.loadFromJsonString(json, sourcePath: file.path);
       } catch (e) {
-        // Handle error - maybe show a snackbar
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error loading file: $e')),
-          );
-        }
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to open file: $e')));
       }
     }
   }
@@ -118,6 +115,10 @@ class EditorWorkspaceState extends State<EditorWorkspace> {
     if (editorState != null && _currentFile != null) {
       await editorState.syncToCurrentFile(_currentFile!.path);
     }
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Unsupported file type')));
   }
 
   @override

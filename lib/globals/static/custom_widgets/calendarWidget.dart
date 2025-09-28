@@ -405,6 +405,23 @@ class _CalendarWidgetState extends State<CalendarWidget> {
                   ),
                 ],
                 SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.bottomRight,
+                  child: StyledButton(
+                    text: 'Submission',
+                    onTap: () async {
+                      if (htmlUrl != null && htmlUrl.isNotEmpty) {
+                        await launchUrl(
+                          Uri.parse(htmlUrl),
+                          mode: LaunchMode.externalApplication,
+                        );
+                      }
+                    },
+                    backgroundColor: colorScheme.primary,
+                    width: MediaQuery.of(context).size.width * 0.1,
+                    height: 48,
+                  ),
+                ),
               ],
             ),
           ),
@@ -570,9 +587,6 @@ class _CalendarWidgetState extends State<CalendarWidget> {
             onEventTap: (event, date) {
               _showEventDetails(event);
             },
-            onEventDoubleTap: (events, date) {},
-            onEventLongTap: (event, date) {},
-            onDateLongPress: (date) {},
           ),
           Positioned(
             right: 16,
