@@ -13,9 +13,10 @@ class ToDo extends StatefulWidget {
   State<ToDo> createState() => _ToDoState();
 }
 
+final uuid = Uuid();
+
 class _ToDoState extends State<ToDo> {
   final List<ToDoItem> _todos = [];
-  final uuid = Uuid();
   final TextEditingController _titleController = TextEditingController();
   DateTime? _selectedDate;
 
