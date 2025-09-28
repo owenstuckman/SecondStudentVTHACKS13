@@ -48,5 +48,12 @@ void deleteItem(String key, String id) {
       ? (jsonDecode(existingRaw) as List<dynamic>)
       : <dynamic>[];
 
-  final Map<String, Map<String, dynamic>> byId = {};
+  final filtered = existing.where((item) {
+    if (item is Map && item['id'] != null) {
+      return item['id'].toString() != id;
+    }
+    return true;
+  }).toList();
+
+  localStorage.setItem(key, jsonEncode(filtered));
 }
