@@ -37,6 +37,9 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
   late final Map<String, List<FileSystemEntity>> _childrenCache = {};
   bool _loadingRoot = true;
   final TextEditingController _inputController = TextEditingController();
+  
+  // Drag and drop state
+  String? _dragTargetDir;
 
   @override
   void initState() {
@@ -81,6 +84,15 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
     if (parts.isEmpty) return path;
     final last = parts.last;
     return last.isEmpty ? path : last;
+  }
+
+  String _displayNameOf(String path) {
+    final name = _nameOf(path);
+    // Hide .json extension in display
+    if (name.toLowerCase().endsWith('.json')) {
+      return name.substring(0, name.length - 5); // Remove '.json'
+    }
+    return name;
   }
 
   Future<void> _ensureChildrenLoaded(String dirPath) async {
@@ -190,6 +202,133 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Failed to create file: $e')));
+    }
+  }
+
+  Future<void> _createNewFolder(String dirPath) async {
+    try {
+      if (!_isWithinRoot(dirPath)) return;
+      
+      // Find a unique folder name starting with "New Folder"
+      String baseName = 'New Folder';
+      String folderName = baseName;
+      int counter = 1;
+      
+      // Keep incrementing until we find a folder name that doesn't exist
+      while (await Directory('$dirPath/$folderName').exists()) {
+        folderName = '$baseName $counter';
+        counter++;
+      }
+      
+      final folder = Directory('$dirPath/$folderName');
+      await folder.create(recursive: true);
+
+      _childrenCache.remove(dirPath);
+      await _ensureChildrenLoaded(dirPath);
+      if (mounted) {
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Created folder $folderName')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to create folder: $e')));
+    }
+  }
+
+  Future<void> _moveItem(FileSystemEntity item, String targetDir) async {
+    try {
+      if (!_isWithinRoot(targetDir)) return;
+      
+      final itemName = _nameOf(item.path);
+      final targetPath = '$targetDir/$itemName';
+      
+      // Check if target already exists
+      if (await FileSystemEntity.type(targetPath) != FileSystemEntityType.notFound) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('$itemName already exists in target folder')),
+          );
+        }
+        return;
+      }
+      
+      // Move the item
+      if (item is File) {
+        await item.rename(targetPath);
+      } else if (item is Directory) {
+        await item.rename(targetPath);
+      }
+      
+      // Clear caches and refresh
+      _childrenCache.remove(File(item.path).parent.path);
+      _childrenCache.remove(targetDir);
+      await _ensureChildrenLoaded(targetDir);
+      await _ensureChildrenLoaded(File(item.path).parent.path);
+      
+      if (mounted) {
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Moved $itemName')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to move item: $e')),
+      );
+    }
+  }
+
+  Future<void> _deleteFile(File file) async {
+    final dirPath = File(file.path).parent.path;
+    if (!_isWithinRoot(dirPath)) return;
+
+    final fileName = _nameOf(file.path);
+    
+    // Show confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete File'),
+        content: Text('Are you sure you want to delete "$fileName"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await file.delete();
+      
+      // Clear cache and refresh
+      _childrenCache.remove(dirPath);
+      await _ensureChildrenLoaded(dirPath);
+      
+      if (mounted) {
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Deleted $fileName')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to delete file: $e')),
+      );
     }
   }
 
@@ -321,34 +460,73 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
 
     return Column(
       children: [
-        _noEnterSpaceActivation(
-          ListTile(
-            dense: true,
-            leading: Icon(expanded ? Icons.folder_open : Icons.folder),
-            title: Text(
-              name.isEmpty ? dirPath : name,
-              overflow: TextOverflow.ellipsis,
-            ),
-            subtitle: depth == 0
-                ? Text(shortenPath(dirPath), overflow: TextOverflow.ellipsis)
-                : null,
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  tooltip: 'New JSON here',
-                  icon: const Icon(Icons.note_add_outlined),
-                  onPressed: () => _createBlankJsonAt(dirPath),
+        DragTarget<FileSystemEntity>(
+          onWillAcceptWithDetails: (details) {
+            final data = details.data;
+            // Don't allow dropping a folder into itself or its subfolders
+            if (data is Directory && data.path.startsWith(dirPath)) return false;
+            // Don't allow dropping a file into its own directory
+            if (data is File && File(data.path).parent.path == dirPath) return false;
+            return true;
+          },
+          onAcceptWithDetails: (details) {
+            _moveItem(details.data, dirPath);
+          },
+          onMove: (details) {
+            setState(() {
+              _dragTargetDir = dirPath;
+            });
+          },
+          onLeave: (data) {
+            setState(() {
+              _dragTargetDir = null;
+            });
+          },
+          builder: (context, candidateData, rejectedData) {
+            final isDragTarget = _dragTargetDir == dirPath;
+            return _noEnterSpaceActivation(
+              Container(
+                decoration: BoxDecoration(
+                  color: isDragTarget 
+                      ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3)
+                      : null,
+                  borderRadius: BorderRadius.circular(4),
                 ),
-                IconButton(
-                  tooltip: expanded ? 'Collapse' : 'Expand',
-                  icon: Icon(expanded ? Icons.expand_less : Icons.expand_more),
-                  onPressed: () => _toggleExpand(dirPath),
+                child: ListTile(
+                  dense: true,
+                  leading: Icon(
+                    expanded ? Icons.folder_open : Icons.folder,
+                    color: isDragTarget 
+                        ? Theme.of(context).colorScheme.primary
+                        : null,
+                  ),
+                  title: Text(
+                    name.isEmpty ? dirPath : name,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: isDragTarget 
+                          ? Theme.of(context).colorScheme.primary
+                          : null,
+                    ),
+                  ),
+                  subtitle: depth == 0
+                      ? Text(shortenPath(dirPath), overflow: TextOverflow.ellipsis)
+                      : null,
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: expanded ? 'Collapse' : 'Expand',
+                        icon: Icon(expanded ? Icons.expand_less : Icons.expand_more),
+                        onPressed: () => _toggleExpand(dirPath),
+                      ),
+                    ],
+                  ),
+                  onTap: () => _toggleExpand(dirPath), // mouse/touch still works
                 ),
-              ],
-            ),
-            onTap: () => _toggleExpand(dirPath), // mouse/touch still works
-          ),
+              ),
+            );
+          },
         ),
         if (expanded)
           Padding(
@@ -374,7 +552,7 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
   Widget _buildFileTile(File file, {required String parentDir, int depth = 0}) {
     final isJson = _isJson(file);
     final isPdf = _isPdf(file);
-    final name = _nameOf(file.path);
+    final displayName = _displayNameOf(file.path);
 
     final openable = isJson || isPdf;
 
@@ -387,28 +565,64 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
       icon = Icons.insert_drive_file;
     }
 
-    return _noEnterSpaceActivation(
-      ListTile(
-        dense: true,
-        leading: Icon(icon),
-        title: Text(name, overflow: TextOverflow.ellipsis),
-        subtitle: Text(
-          shortenPath(file.path),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+    return Draggable<FileSystemEntity>(
+      data: file,
+      onDragStarted: () {
+        // Drag started
+      },
+      onDragEnd: (details) {
+        setState(() {
+          _dragTargetDir = null;
+        });
+      },
+      feedback: Material(
+        elevation: 4,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: Theme.of(context).colorScheme.outline),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 16),
+              const SizedBox(width: 8),
+              Text(displayName),
+            ],
+          ),
         ),
-        onTap: openable ? () => widget.onFileSelected(file) : null,
-        enabled: openable,
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (isJson)
+      ),
+      child: _noEnterSpaceActivation(
+        ListTile(
+          dense: true,
+          leading: Icon(icon),
+          title: Text(displayName, overflow: TextOverflow.ellipsis),
+          subtitle: Text(
+            shortenPath(file.path),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          onTap: openable ? () => widget.onFileSelected(file) : null,
+          enabled: openable,
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isJson)
+                IconButton(
+                  tooltip: 'Rename',
+                  icon: const Icon(Icons.drive_file_rename_outline),
+                  onPressed: () => _renameFile(file),
+                ),
               IconButton(
-                tooltip: 'Rename',
-                icon: const Icon(Icons.drive_file_rename_outline),
-                onPressed: () => _renameFile(file),
+                tooltip: 'Delete',
+                icon: const Icon(Icons.delete_outline),
+                onPressed: () => _deleteFile(file),
+                style: IconButton.styleFrom(foregroundColor: Colors.red),
               ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -466,13 +680,12 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
+          padding: const EdgeInsets.fromLTRB(8, 12, 8, 6),
           child: Row(
             children: [
               Expanded(
                 child: Text(
-                  shortenPath(_rootPath!),
-                  textAlign: TextAlign.end,
+                  shortenPath(_rootPath!, maxLength: 50),
                   maxLines: 1,
                   style: Theme.of(context).textTheme.labelMedium,
                 ),
@@ -481,11 +694,22 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
                 tooltip: 'Refresh',
                 onPressed: _refresh,
                 icon: const Icon(Icons.refresh),
+                padding: const EdgeInsets.all(8),
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               ),
-              const SizedBox(width: 8),
-              FilledButton.tonal(
+              IconButton(
+                tooltip: 'New Note',
                 onPressed: () => _createBlankJsonAt(_rootPath!),
-                child: const Text('New Note'),
+                icon: const Icon(Icons.note_add),
+                padding: const EdgeInsets.all(8),
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              ),
+              IconButton(
+                tooltip: 'New Folder',
+                onPressed: () => _createNewFolder(_rootPath!),
+                icon: const Icon(Icons.create_new_folder),
+                padding: const EdgeInsets.all(8),
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               ),
             ],
           ),
