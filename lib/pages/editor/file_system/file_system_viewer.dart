@@ -7,8 +7,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // Shortcuts/Actions/Intents, LogicalKeyboardKey
 import 'package:shared_preferences/shared_preferences.dart';
 
+
 typedef FileSelected = void Function(File file);
 typedef FileRenamed = void Function(File oldFile, File newFile);
+
+String shortenPath(String path, {int maxLength = 30}) {
+  if (path.length <= maxLength) return path;
+  return '...${path.substring(path.length - maxLength)}';
+}
 
 class FileSystemViewer extends StatefulWidget {
   const FileSystemViewer({
@@ -67,6 +73,9 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
   bool _isJson(FileSystemEntity e) =>
       e is File && e.path.toLowerCase().endsWith('.json');
 
+  bool _isPdf(FileSystemEntity e) =>
+      e is File && e.path.toLowerCase().endsWith('.pdf');
+
   String _nameOf(String path) {
     final parts = path.split(Platform.pathSeparator);
     if (parts.isEmpty) return path;
@@ -89,14 +98,11 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
     }
 
     try {
-      final kids = dir
-          .listSync(followLinks: false)
-          .where((e) {
-            final base = _nameOf(e.path);
-            if (!widget.showHidden && _isHidden(base)) return false;
-            return true;
-          })
-          .toList();
+      final kids = dir.listSync(followLinks: false).where((e) {
+        final base = _nameOf(e.path);
+        if (!widget.showHidden && _isHidden(base)) return false;
+        return true;
+      }).toList();
 
       kids.sort((a, b) {
         final aIsDir = FileSystemEntity.isDirectorySync(a.path);
@@ -120,10 +126,9 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
   }
 
   String _normalize(String p) {
-    return File(p).absolute.path.replaceAll(
-          RegExp(r'[\\/]+'),
-          Platform.pathSeparator,
-        );
+    return File(
+      p,
+    ).absolute.path.replaceAll(RegExp(r'[\\/]+'), Platform.pathSeparator);
   }
 
   Future<void> _toggleExpand(String dirPath) async {
@@ -154,7 +159,7 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
           "insert": "Sample\n",
           "attributes": {"header": 1},
         },
-        {"insert": "\n"}
+        {"insert": "\n"},
       ];
 
       // Write as proper JSON
@@ -170,8 +175,9 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Failed to create file: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to create file: $e')));
     }
   }
 
@@ -275,8 +281,9 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
       widget.onFileRenamed?.call(file, renamed);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Failed to rename: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to rename: $e')));
     }
   }
 
@@ -289,9 +296,7 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
         LogicalKeySet(LogicalKeyboardKey.space): const DoNothingIntent(),
       },
       child: Actions(
-        actions: {
-          ActivateIntent: DoNothingAction(),
-        },
+        actions: {ActivateIntent: DoNothingAction()},
         child: child,
       ),
     );
@@ -312,8 +317,9 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
               name.isEmpty ? dirPath : name,
               overflow: TextOverflow.ellipsis,
             ),
-            subtitle:
-                depth == 0 ? Text(dirPath, overflow: TextOverflow.ellipsis) : null,
+            subtitle: depth == 0
+                ? Text(shortenPath(dirPath), overflow: TextOverflow.ellipsis)
+                : null,
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -352,18 +358,35 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
     );
   }
 
+  // Replace your existing _buildFileTile with this:
   Widget _buildFileTile(File file, {required String parentDir, int depth = 0}) {
     final isJson = _isJson(file);
+    final isPdf = _isPdf(file);
     final name = _nameOf(file.path);
+
+    final openable = isJson || isPdf;
+
+    IconData icon;
+    if (isJson) {
+      icon = Icons.description;
+    } else if (isPdf) {
+      icon = Icons.picture_as_pdf;
+    } else {
+      icon = Icons.insert_drive_file;
+    }
 
     return _noEnterSpaceActivation(
       ListTile(
         dense: true,
-        leading: Icon(isJson ? Icons.description : Icons.insert_drive_file),
+        leading: Icon(icon),
         title: Text(name, overflow: TextOverflow.ellipsis),
-        subtitle: Text(file.path, maxLines: 1, overflow: TextOverflow.ellipsis),
-        onTap: isJson ? () => widget.onFileSelected(file) : null,
-        enabled: isJson,
+        subtitle: Text(
+          shortenPath(file.path),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        onTap: openable ? () => widget.onFileSelected(file) : null,
+        enabled: openable,
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -405,8 +428,9 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
             children: [
               Expanded(
                 child: Text(
-                  _rootPath!,
-                  overflow: TextOverflow.ellipsis,
+                  shortenPath(_rootPath!),
+                  textAlign: TextAlign.end,
+                  maxLines: 1,
                   style: Theme.of(context).textTheme.labelMedium,
                 ),
               ),

@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 
 import 'editor/editor.dart';
+import 'editor/pdf_viewer_pane.dart';          // <-- add this
 import 'file_system/file_system_viewer.dart';
 
 class EditorWorkspace extends StatefulWidget {
@@ -22,10 +23,16 @@ class _EditorWorkspaceState extends State<EditorWorkspace> {
   double _leftWidth = 300;
   bool _showSidebar = true;
 
+  // Track which file is open and whether we’re showing the PDF pane.
+  File? _currentFile;
+  bool get _showingPdf =>
+      _currentFile != null &&
+      _currentFile!.path.toLowerCase().endsWith('.pdf');
+
   @override
   void initState() {
     super.initState();
-    _ensureWorkspacePath();          // <- NEW: make sure a sane default exists
+    _ensureWorkspacePath();
     _restoreLayoutPrefs();
   }
 
@@ -37,16 +44,14 @@ class _EditorWorkspaceState extends State<EditorWorkspace> {
 
     String path;
     if (kIsWeb) {
-      // No native FS. Your FileStorage page can swap to IndexedDB later.
+      // Placeholder: you'll later back this with IndexedDB / OPFS.
       path = 'web://workspace';
     } else if (Platform.isMacOS) {
-      // ~/Library/Application Support/<bundle-id>/SecondStudent/workspace
       final support = await getApplicationSupportDirectory();
       final ws = Directory(p.join(support.path, 'SecondStudent', 'workspace'));
       if (!await ws.exists()) await ws.create(recursive: true);
       path = ws.path;
     } else if (Platform.isWindows || Platform.isLinux) {
-      // App documents dir (writable). If you prefer real "Documents", add a helper or another plugin.
       final docs = await getApplicationDocumentsDirectory();
       final ws = Directory(p.join(docs.path, 'SecondStudent', 'workspace'));
       if (!await ws.exists()) await ws.create(recursive: true);
@@ -81,21 +86,40 @@ class _EditorWorkspaceState extends State<EditorWorkspace> {
   }
 
   Future<void> _onFileSelected(File file) async {
-    try {
-      final json = await file.readAsString();
-      final state = _editorKey.currentState;
-      if (state == null) {
+    final lower = file.path.toLowerCase();
+    _currentFile = file;
+
+    if (lower.endsWith('.pdf')) {
+      // Do not read as text. Just show the PDF viewer on the right.
+      setState(() {}); // triggers pane swap
+      return;
+    }
+
+    if (lower.endsWith('.json')) {
+      try {
+        final json = await file.readAsString();
+        final state = _editorKey.currentState;
+        if (state == null) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context)
+              .showSnackBar(const SnackBar(content: Text('Editor not ready yet.')));
+          return;
+        }
+        // Let the editor load the JSON; keep the editor pane visible
+        (state as dynamic).loadFromJsonString(json, sourcePath: file.path);
+        setState(() {}); // track current file for title, rename, etc.
+      } catch (e) {
         if (!mounted) return;
         ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Editor not ready yet.')));
-        return;
+            .showSnackBar(SnackBar(content: Text('Failed to open file: $e')));
       }
-      (state as dynamic).loadFromJsonString(json, sourcePath: file.path);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Failed to open file: $e')));
+      return;
     }
+
+    // Non-openable (should be disabled upstream, but just in case)
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Unsupported file type')));
   }
 
   @override
@@ -125,7 +149,12 @@ class _EditorWorkspaceState extends State<EditorWorkspace> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('SecondStudent — Workspace'),
+        title: Text(
+          _currentFile == null
+              ? 'SecondStudent — Workspace'
+              : 'SecondStudent — ${p.basename(_currentFile!.path)}',
+          overflow: TextOverflow.ellipsis,
+        ),
         actions: [
           IconButton(
             tooltip: _showSidebar ? 'Hide sidebar' : 'Show sidebar',
@@ -156,19 +185,48 @@ class _EditorWorkspaceState extends State<EditorWorkspace> {
                 child: FileSystemViewer(
                   onFileSelected: _onFileSelected,
                   onFileRenamed: (oldFile, newFile) {
+                    // Keep the right pane in sync if the open file was renamed
+                    if (_currentFile?.path == oldFile.path) {
+                      setState(() => _currentFile = newFile);
+                    }
+                    // Also notify the editor if a JSON doc is open
                     final state = _editorKey.currentState;
-                    if (state == null) return;
-                    try {
-                      (state as dynamic).updateCurrentFilePath(newFile.path);
-                    } catch (_) {}
+                    if (state != null && !_showingPdf) {
+                      try {
+                        (state as dynamic).updateCurrentFilePath(newFile.path);
+                      } catch (_) {}
+                    }
                   },
                 ),
               ),
             ),
           if (_showSidebar) divider,
-          Expanded(child: EditorScreen(key: _editorKey)),
+          Expanded(
+            child: _buildRightPane(),
+          ),
         ],
       ),
     );
+  }
+
+  Widget _buildRightPane() {
+    // Nothing selected yet
+    if (_currentFile == null) {
+      return const Center(child: Text('Select a JSON or PDF from the left.'));
+    }
+
+    // PDF path
+    if (_showingPdf) {
+      if (kIsWeb) {
+        // Your PdfViewerPane already guards, but this makes it explicit
+        return const Center(
+          child: Text('Web PDF viewing from local paths is not supported yet.'),
+        );
+      }
+      return PdfViewerPane(file: _currentFile!);
+    }
+
+    // Editor path (JSON)
+    return EditorScreen(key: _editorKey);
   }
 }

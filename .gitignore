@@ -59,7 +59,5 @@ macos/Flutter/Flutter-Debug.xcconfig
 devFolder/token.json
 /macos
 macos/Runner.xcodeproj/project.pbxproj
-macos/Runner/DebugProfile.entitlements
-macos/Runner/Release.entitlements
 pubspec.lock
 pubspec.yaml
