@@ -59,8 +59,7 @@ class _BugReportingState extends State<BugReporting> {
           },
         ),
       )
-      ..loadRequest(Uri.parse(
-          'https://forms.office.com/r/si3JuQtu7c'));
+      ..loadRequest(Uri.parse('https://forms.office.com/r/si3JuQtu7c'));
 
     // Additional platform-specific settings for Android
     if (controller.platform is AndroidWebViewController) {
@@ -76,19 +75,17 @@ class _BugReportingState extends State<BugReporting> {
       body: Stack(
         children: [
           WebViewWidget(
-              controller: controller,
-              gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
-                Factory<VerticalDragGestureRecognizer>(
-                      () => VerticalDragGestureRecognizer(),
-                ),
-                Factory<HorizontalDragGestureRecognizer>(
-                      () => HorizontalDragGestureRecognizer(),
-                ),
-              }),
-          if (isLoading)
-            const Center(
-              child: CircularProgressIndicator(),
-            ),
+            controller: controller,
+            gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+              Factory<VerticalDragGestureRecognizer>(
+                () => VerticalDragGestureRecognizer(),
+              ),
+              Factory<HorizontalDragGestureRecognizer>(
+                () => HorizontalDragGestureRecognizer(),
+              ),
+            },
+          ),
+          if (isLoading) const Center(child: CircularProgressIndicator()),
         ],
       ),
     );

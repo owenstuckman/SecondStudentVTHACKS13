@@ -28,6 +28,8 @@ import '../slash_menu/slash_menu_action.dart';
 import '../slash_menu/custom_slash_menu_items.dart';
 import '../slash_menu/default_slash_menu_items.dart';
 import 'receive_blocks.dart';
+import '../../../globals/database.dart';
+import 'package:secondstudent/pages/editor/sync.dart';
 
 import '../template.dart';
 
@@ -196,12 +198,25 @@ class _EditorScreenState extends State<EditorScreen> {
     }
   }
 
+  /// Save back to the current file path (set when opening from the file viewer).
+  Future<void> syncToCurrentFile(String filePath) async {
+    final user = supabase.auth.getUser();
+    if (user == null) {
+      return;
+    }
+
+    Sync().syncFile(filePath);
+  }
+
   String _basename(String path) {
     final parts = path.split(Platform.pathSeparator);
     return parts.isEmpty ? path : parts.last;
   }
 
-  Future<String?> _promptForUrl(BuildContext context, {required String label}) async {
+  Future<String?> _promptForUrl(
+    BuildContext context, {
+    required String label,
+  }) async {
     final controller = TextEditingController();
     return showDialog<String>(
       context: context,
@@ -590,6 +605,20 @@ class _EditorScreenState extends State<EditorScreen> {
                   onPressed: saveToCurrentFile,
                   child: const Text('Save'),
                 ),
+                FilledButton(
+                  onPressed: () async {
+                    if (_currentFilePath != null && _currentFilePath!.isNotEmpty) {
+                      await syncToCurrentFile(_currentFilePath!);
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('No file bound. Open a JSON file from the list first.'),
+                        ),
+                      );
+                    }
+                  },
+                  child: const Text('Sync'),
+                ),
                 const SizedBox(width: 12),
                 if (_currentFilePath != null)
                   Flexible(
@@ -741,10 +770,7 @@ abstract class _EditorScreenApi {
 class _EditorApiInjector extends InheritedWidget {
   final void Function(_EditorScreenApi api) onCreateApi;
 
-  const _EditorApiInjector({
-    required this.onCreateApi,
-    required super.child,
-  });
+  const _EditorApiInjector({required this.onCreateApi, required super.child});
 
   static _EditorApiInjector? of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<_EditorApiInjector>();

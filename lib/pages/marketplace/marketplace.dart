@@ -37,7 +37,9 @@ class _MarketplaceState extends State<Marketplace> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text('Marketplace')),
-      body: MarketplaceCards(data: data), // Call the MarketplaceCards widget with the fetched data
+      body: MarketplaceCards(
+        data: data,
+      ), // Call the MarketplaceCards widget with the fetched data
     );
   }
 }
