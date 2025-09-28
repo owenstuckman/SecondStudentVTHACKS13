@@ -10,8 +10,6 @@ class MarketplaceCard {
   final String author;
   final bool verified;
   final bool enabled;
-  final DateTime createdAt;
-  final DateTime? lastUpdated;
   final dynamic metadata;
 
   MarketplaceCard({
@@ -21,10 +19,32 @@ class MarketplaceCard {
     required this.author,
     required this.verified,
     required this.enabled,
-    required this.createdAt,
-    this.lastUpdated,
     this.metadata,
   });
+}
+
+class CFunction {
+  final int endpointId;
+  final String name;
+  final String exec;
+  final String description;
+
+  CFunction({
+    required this.endpointId,
+    required this.name,
+    required this.exec,
+    required this.description,
+  });
+
+  // Factory constructor to create a CFunction object from a Map
+  factory CFunction.fromJson(Map<String, dynamic> json) {
+    return CFunction(
+      endpointId: json['endpointId'] as int,
+      name: json['name'] as String,
+      exec: json['exec'] as String,
+      description: json['description'] as String,
+    );
+  }
 }
 
 class MarketplaceCards extends StatelessWidget {
@@ -41,10 +61,7 @@ class MarketplaceCards extends StatelessWidget {
         author: item['author']?.toString() ?? 'Unknown Author',
         verified: item['verified'] ?? false,
         enabled: item['enabled'] ?? false,
-        createdAt: DateTime.parse(item['created_at']),
-        lastUpdated: item['last_updated'] != null
-            ? DateTime.parse(item['last_updated'])
-            : null,
+
         metadata: item['metadata'],
       );
     }).toList();
@@ -66,7 +83,6 @@ class MarketplaceCards extends StatelessWidget {
             de.$String(card.name),
             de.$String(card.description),
             de.$String(card.id),
-            const de.$null(),
           ],
         ),
       ),
@@ -79,20 +95,12 @@ class MarketplaceCards extends StatelessWidget {
         .select('*')
         .eq('collection', card.id);
 
-    final dbCode = response[0]['exec'];
+    final List<CFunction> cfunctionDataList = response
+        .map((item) => CFunction.fromJson(item))
+        .toList();
 
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => General(
-          dbCode: dbCode,
-          args: [
-            de.$String(card.name),
-            de.$String(card.description),
-            de.$String(card.id),
-            const de.$null(),
-          ],
-        ),
-      ),
+      MaterialPageRoute(builder: (_) => General(cfunctions: cfunctionDataList)),
     );
   }
 

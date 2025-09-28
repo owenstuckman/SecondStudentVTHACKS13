@@ -1,12 +1,11 @@
 // lib/file_system_viewer.dart
 import 'dart:convert';
 import 'dart:io';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // Shortcuts/Actions/Intents, LogicalKeyboardKey
 import 'package:shared_preferences/shared_preferences.dart';
-
+import 'package:secondstudent/globals/database.dart';
 
 typedef FileSelected = void Function(File file);
 typedef FileRenamed = void Function(File oldFile, File newFile);
@@ -37,6 +36,7 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
   late final Set<String> _expandedDirs = {};
   late final Map<String, List<FileSystemEntity>> _childrenCache = {};
   bool _loadingRoot = true;
+  final TextEditingController _inputController = TextEditingController();
 
   @override
   void initState() {
@@ -401,6 +401,33 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
     );
   }
 
+  void _onSubmit() async {
+    final List<Map<String, dynamic>> snap = await supabase
+        .from('documents')
+        .select('snapshot');
+    print('Raw file contents: $snap');
+    String newSnap = snap[0]['snapshot'];
+
+    final List<dynamic> jsonData = jsonDecode(newSnap);
+    if (jsonData.isNotEmpty) {
+      final fileContent = jsonEncode(jsonData);
+      // Assuming you want to create a new file with the fetched content
+      await _createBlankJsonAt(_rootPath!);
+      final newFile = File('${_rootPath!}/fetched_file.json');
+      await newFile.writeAsString(fileContent);
+      widget.onFileSelected(
+        newFile,
+      ); // Open the newly created file in the editor
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No data found in the JSON file.')),
+      );
+    }
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Failed to fetch JSON')));
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loadingRoot) {
@@ -449,6 +476,23 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
         const Divider(height: 1),
         Expanded(
           child: ListView(children: [_buildDirTile(_rootPath!, depth: 0)]),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _inputController,
+                  decoration: const InputDecoration(
+                    hintText: 'Enter text here',
+                  ),
+                  onSubmitted: (_) => _onSubmit(),
+                ),
+              ),
+              IconButton(icon: const Icon(Icons.send), onPressed: _onSubmit),
+            ],
+          ),
         ),
       ],
     );

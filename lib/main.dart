@@ -19,6 +19,7 @@ final StreamController<StreamSignal> mainStream =
 
 void main() async {
   // init supabase
+
   await DataBase.tryInitialize();
 
   // set orientation for chrome
