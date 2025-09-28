@@ -1,4 +1,5 @@
 // lib/pages/editor/workspace.dart
+import 'file.dart';
 import 'dart:developer';
 import 'dart:io';
 import 'dart:convert';
@@ -82,15 +83,34 @@ class _ClassesState extends State<Classes> {
                       childAspectRatio: 1.5,
                     ),
                     itemCount: courses.length,
-                    itemBuilder: (context, index) => ClassesCard(
-                      key: Key(courses[index]['id'].toString()),
-                      Class(
-                        id: courses[index]['id'],
-                        name: courses[index]['name'] ?? '',
-                        course_code: courses[index]['course_code'] ?? '',
-                        created_at: courses[index]['created_at'] ?? '',
-                      ),
-                    ),
+
+                    itemBuilder: (context, index) {
+                      final course = courses[index];
+
+                      return MouseRegion(
+                        cursor: SystemMouseCursors
+                            .click, // shows a pointer-hand on hover
+                        child: GestureDetector(
+                          key: Key(course['id'].toString()),
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    FilePage(courseId: course['id']),
+                              ),
+                            );
+                          },
+                          child: ClassesCard(
+                            Class(
+                              id: course['id'],
+                              name: course['name'] ?? '',
+                              course_code: course['course_code'] ?? '',
+                              created_at: course['created_at'] ?? '',
+                            ),
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
               ),
