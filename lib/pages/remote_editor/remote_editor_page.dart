@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:secondstudent/pages/editor/editor/editor.dart';
+import 'package:quill_markdown/quill_markdown.dart' as qm;
 
 class RemoteEditorPage extends StatefulWidget {
   final String fileUrl;
@@ -58,8 +59,13 @@ class _RemoteEditorPageState extends State<RemoteEditorPage> {
       );
     }
     String jsonToLoad = _json ?? '';
-    if (!(widget.fileName.toLowerCase().endsWith('.json'))) {
-      // convert plain text/markdown into a simple delta JSON
+    final lowerName = widget.fileName.toLowerCase();
+    if (lowerName.endsWith('.md')) {
+      // Convert markdown to Delta using quill_markdown
+      final delta = qm.deltaFromMarkdown(jsonToLoad);
+      jsonToLoad = jsonEncode(delta);
+    } else if (!lowerName.endsWith('.json')) {
+      // treat as plain text
       jsonToLoad = jsonEncode([
         {'insert': jsonToLoad + '\n'},
       ]);
