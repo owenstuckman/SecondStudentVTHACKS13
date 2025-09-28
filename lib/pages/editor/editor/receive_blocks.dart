@@ -9,10 +9,11 @@ import 'package:flutter_quill/flutter_quill.dart' as quill;
 import '../slash_menu/slash_menu_action.dart';
 import 'package:secondstudent/pages/editor/custom_blocks/customblocks.dart';
 
-typedef EditorAction = FutureOr<void> Function(
-  BuildContext context,
-  quill.QuillController controller,
-);
+typedef EditorAction =
+    FutureOr<void> Function(
+      BuildContext context,
+      quill.QuillController controller,
+    );
 
 class ReceiveBlocks {
   ReceiveBlocks();
@@ -93,8 +94,9 @@ class ReceiveBlocks {
         context,
         controller: controller,
         document: controller.document,
-        existingOffset:
-            controller.selection.isValid ? controller.selection.start : null,
+        existingOffset: controller.selection.isValid
+            ? controller.selection.start
+            : null,
       );
     },
 
@@ -155,7 +157,7 @@ class ReceiveBlocks {
     },
   };
 
-/*
+  /*
   // If you want to add actions at runtime from an external source:
   Future<void> fetchExternalActions() async {
     final externalActions = await getExternalActionsFromDatabase();
@@ -167,7 +169,7 @@ class ReceiveBlocks {
   }
 */
 
-/*
+  /*
   // Example: simulate fetching actions from a DB / remote config.
   Future<Map<SlashMenuAction, EditorAction>> getExternalActionsFromDatabase() async {
     await Future.delayed(const Duration(milliseconds: 300));
