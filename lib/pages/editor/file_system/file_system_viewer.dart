@@ -6,8 +6,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // Shortcuts/Actions/Intents, LogicalKeyboardKey
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:share/share.dart'; // Import the share package
-import 'package:secondstudent/globals/database.dart';
+
 
 typedef FileSelected = void Function(File file);
 typedef FileRenamed = void Function(File oldFile, File newFile);
@@ -288,20 +287,6 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
     }
   }
 
-  Future<void> _shareID(File file) async {
-    final filePath = file.path;
-    String uuid = await supabase
-        .from('documents')
-        .select('id')
-        .single()
-        .toString();
-    final String message = 'Check out this file: ${uuid}';
-    Clipboard.setData(ClipboardData(text: message));
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('ID copied to clipboard ${uuid}')));
-  }
-
   /// Prevent Enter / Space from activating ListTile (opening/closing) via keyboard.
   Widget _noEnterSpaceActivation(Widget child) {
     return Shortcuts(
@@ -411,11 +396,6 @@ class _FileSystemViewerState extends State<FileSystemViewer> {
                 icon: const Icon(Icons.drive_file_rename_outline),
                 onPressed: () => _renameFile(file),
               ),
-            IconButton(
-              tooltip: 'Share',
-              icon: const Icon(Icons.share),
-              onPressed: () => _shareID(file),
-            ),
           ],
         ),
       ),
