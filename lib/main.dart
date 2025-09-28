@@ -21,6 +21,7 @@ final StreamController<StreamSignal> mainStream =
 
 void main() async {
   // init supabase
+
   await DataBase.tryInitialize();
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -39,9 +40,6 @@ void main() async {
   if (p != null && p.isNotEmpty) {
     await Sync().syncDown(p);
   }
-
-  // init supabase
-  await DataBase.tryInitialize();
 
   // double check theme initialized
   Themes.checkTheme();
