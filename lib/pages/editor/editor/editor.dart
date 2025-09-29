@@ -1,5 +1,15 @@
 // lib/editor.dart — Quill-backed editor with JSON load/save and external load API
 
+/*
+
+
+TODO:
+ - [ ] push custom blocks into new files
+ - [ ] push iframes into seperate files
+ - [ ] get iframe slash menu into one file 
+
+*/
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -16,10 +26,8 @@ import 'package:secondstudent/pages/editor/custom_blocks/customblocks.dart';
 import 'package:secondstudent/pages/editor/custom_blocks/pdf_block.dart';
 import 'package:secondstudent/pages/editor/custom_blocks/page_link_block.dart';
 import 'package:secondstudent/pages/editor/custom_blocks/page_link_service.dart';
-import 'package:secondstudent/pages/editor/custom_blocks/readonly_block.dart';
 import 'package:secondstudent/pages/editor/custom_blocks/table_block.dart';
 import 'package:secondstudent/pages/editor/editor/table_editor.dart';
-
 
 // Iframe builder lives here (per your note)
 import 'package:secondstudent/pages/editor/custom_blocks/iframe_block.dart';
@@ -34,12 +42,8 @@ import 'package:secondstudent/pages/editor/sync.dart';
 
 import '../template.dart';
 
-/**
-
-need to somehow import this: 
-/.secondstudent/customblocks/execs.dart
-
- */
+// External access
+import 'editor_screen_api.dart';
 
 class EditorScreen extends StatefulWidget {
   const EditorScreen({
@@ -70,7 +74,7 @@ class EditorScreenState extends State<EditorScreen> {
   bool _isSlashMenuOpen = false;
   String _slashQuery = '';
   final ValueNotifier<int> _slashSelectionIndex = ValueNotifier<int>(0);
-  
+
   // Editor key for positioning
   final GlobalKey _editorKey = GlobalKey();
 
@@ -357,13 +361,14 @@ class EditorScreenState extends State<EditorScreen> {
   }
 
   Offset? _getCursorPosition() {
-    final renderBox = _editorKey.currentContext?.findRenderObject() as RenderBox?;
+    final renderBox =
+        _editorKey.currentContext?.findRenderObject() as RenderBox?;
     if (renderBox == null) return null;
-    
+
     // Get the text position from the selection
     final selection = _controller.selection;
     if (!selection.isValid) return null;
-    
+
     // For now, we'll use a simple approximation
     // In a real implementation, you'd need to get the actual text position
     // This is a simplified approach that positions the menu near the top-left
@@ -479,10 +484,13 @@ class EditorScreenState extends State<EditorScreen> {
         break;
 
       case SlashMenuAction.iframeExcalidraw:
-        _promptForUrl(context, label: 'Excalidraw room/share URL (leave empty for new drawing)').then((url) {
+        _promptForUrl(
+          context,
+          label: 'Excalidraw room/share URL (leave empty for new drawing)',
+        ).then((url) {
           // If user submits empty field, go to excalidraw.com
-          final excalidrawUrl = (url == null || url.trim().isEmpty) 
-              ? 'https://excalidraw.com' 
+          final excalidrawUrl = (url == null || url.trim().isEmpty)
+              ? 'https://excalidraw.com'
               : url;
           cb.insertIframe(
             _controller,
@@ -611,7 +619,7 @@ class EditorScreenState extends State<EditorScreen> {
   @override
   Widget build(BuildContext context) {
     // Expose the editor API so the file viewer can call loadFromJsonString(...)
-    attachEditorApi(context, _EditorApiImpl(this));
+    attachEditorApi(context, EditorApiImpl(this));
 
     final filteredItems = _filteredSlashItems;
     return Focus(
@@ -749,44 +757,5 @@ class EditorScreenState extends State<EditorScreen> {
         content: Text('File renamed. Now editing: ${_basename(newPath)}'),
       ),
     );
-  }
-}
-
-// ================= Editor API injector (to allow external load) =================
-
-/// Editor API the host (workspace/file viewer) can call.
-abstract class _EditorScreenApi {
-  void loadFromJson(String json, String filePath);
-}
-
-/// Lightweight inherited widget to expose an API to the editor.
-class _EditorApiInjector extends InheritedWidget {
-  final void Function(_EditorScreenApi api) onCreateApi;
-
-  const _EditorApiInjector({required this.onCreateApi, required super.child});
-
-  static _EditorApiInjector? of(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<_EditorApiInjector>();
-
-  @override
-  bool updateShouldNotify(covariant InheritedWidget oldWidget) => false;
-}
-
-/// Extend EditorScreen’s State to register an API instance.
-extension _EditorScreenApiHook on State<EditorScreen> {
-  void attachEditorApi(BuildContext context, _EditorScreenApi api) {
-    final injector = _EditorApiInjector.of(context);
-    if (injector != null) injector.onCreateApi(api);
-  }
-}
-
-/// Concrete API implementation that delegates to the editor state.
-class _EditorApiImpl implements _EditorScreenApi {
-  final EditorScreenState _state;
-  _EditorApiImpl(State<EditorScreen> s) : _state = s as EditorScreenState;
-
-  @override
-  void loadFromJson(String json, String filePath) {
-    _state.loadFromJsonString(json, sourcePath: filePath);
   }
 }
