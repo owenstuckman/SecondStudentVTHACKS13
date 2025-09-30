@@ -39,6 +39,8 @@ void main() async {
     await Sync().syncDown(p);
   }
 
+
+  // need to do logic for making a .studentstudent file on every platform 
   final String? pathToFiles = prefs.getString('path_to_files')?.trim();
   if (pathToFiles != null && pathToFiles.isNotEmpty) {
     final Directory studentDirectory = Directory(pathToFiles);
