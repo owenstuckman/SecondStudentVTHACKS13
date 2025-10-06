@@ -2,6 +2,25 @@
 
 Note taking app which enables you to use Canvas (Instructure) alongside your notes. Extensible to create other plugins and handle different types of notes.
 
+Flutter project built with supabase. 
+
+# Running/Developing
+
+Verify flutter install:
+```bash
+flutter doctor
+```
+
+Run the following once flutter installation is complete:
+```bash
+flutter pub get
+```
+
+To run the application, run:
+```bash
+flutter run 
+```
+
 ---
 
 # Devpost 
